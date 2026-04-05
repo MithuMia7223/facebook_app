@@ -1,9 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from ..db import get_db
-from ..models import User, friend_table
-from ..dtos import UserCreate, UserUpdate, UserGetMeResponse
-from ..auth import read_current_user
+from sqlalchemy.exc import IntegrityError
+
+try:
+    from ..db import get_db
+    from ..models import User, friend_table
+    from ..dtos import UserCreate, UserUpdate, UserGetMeResponse
+    from ..auth import read_current_user
+except ImportError:
+    from db import get_db
+    from models import User, friend_table
+    from dtos import UserCreate, UserUpdate, UserGetMeResponse
+    from auth import read_current_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -63,8 +71,11 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(db_user)
         return db_user
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Username already exists")
     except Exception as e:
-        print("ERROR:", e)
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -77,6 +88,8 @@ def add_friend(
 ):
     if id != current_user.id:
         raise HTTPException(status_code=401, detail="Unauthorized")
+    if id == friend_id:
+        raise HTTPException(status_code=400, detail="You cannot add yourself")
     user = db.query(User).filter(User.id == id).first()
     friend = db.query(User).filter(User.id == friend_id).first()
     if not user or not friend:
@@ -95,6 +108,12 @@ def get_friends(
     offset: int = Query(0),
     db: Session = Depends(get_db),
 ):
+    total = (
+        db.query(User)
+        .join(friend_table, User.id == friend_table.c.friend_id)
+        .filter(friend_table.c.user_id == id)
+        .count()
+    )
     friends = (
         db.query(User)
         .join(friend_table, User.id == friend_table.c.friend_id)
@@ -103,7 +122,6 @@ def get_friends(
         .limit(limit)
         .all()
     )
-    total = len(friends)
     return {"total": total, "limit": limit, "offset": offset, "data": friends}
 
 
@@ -118,6 +136,8 @@ def remove_friend(
         raise HTTPException(status_code=401, detail="Unauthorized")
     user = db.query(User).filter(User.id == id).first()
     friend = db.query(User).filter(User.id == friend_id).first()
+    if not user or not friend:
+        raise HTTPException(status_code=404, detail="User not found")
     if friend in user.friends:
         user.friends.remove(friend)
         friend.friends.remove(user)

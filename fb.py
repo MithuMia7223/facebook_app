@@ -1,5 +1,9 @@
 from fastapi import FastAPI
-from .routers import users, posts, comments, likes
+
+try:
+    from .routers import users, posts, comments, likes
+except ImportError:
+    from routers import users, posts, comments, likes
 
 
 app = FastAPI(title="Facebook4 API", version="1.0.0")

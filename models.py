@@ -1,6 +1,10 @@
 from sqlalchemy import Column, Integer, String, Table, Text, ForeignKey
 from sqlalchemy.orm import relationship
-from .db import Base, engine
+
+try:
+    from .db import Base, engine
+except ImportError:
+    from db import Base, engine
 
 friend_table = Table(
     "friends",

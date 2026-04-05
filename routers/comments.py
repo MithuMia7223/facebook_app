@@ -1,9 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from ..db import get_db
-from ..models import Comment, User
-from ..dtos import CommentCreate, CommentUpdate
-from ..auth import read_current_user
+
+try:
+    from ..db import get_db
+    from ..models import Comment, User, Post
+    from ..dtos import CommentCreate, CommentUpdate
+    from ..auth import read_current_user
+except ImportError:
+    from db import get_db
+    from models import Comment, User, Post
+    from dtos import CommentCreate, CommentUpdate
+    from auth import read_current_user
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
@@ -15,9 +22,14 @@ def create_comment(
     current_user: User = Depends(read_current_user),
     db: Session = Depends(get_db),
 ):
+    post = db.query(Post).filter(Post.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
     new_comment = Comment(
         content=comment.content, author_id=current_user.id, post_id=post_id
     )
+    post.comment_count += 1
     db.add(new_comment)
     db.commit()
     db.refresh(new_comment)
@@ -50,6 +62,8 @@ def update_comment(
     db: Session = Depends(get_db),
 ):
     comment = db.query(Comment).filter(Comment.id == id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
     if comment.author_id != current_user.id:
         raise HTTPException(status_code=401, detail="Unauthorized")
     if data.content:
@@ -66,8 +80,13 @@ def delete_comment(
     db: Session = Depends(get_db),
 ):
     comment = db.query(Comment).filter(Comment.id == id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
     if comment.author_id != current_user.id:
         raise HTTPException(status_code=401, detail="Unauthorized")
+    post = db.query(Post).filter(Post.id == comment.post_id).first()
+    if post and post.comment_count > 0:
+        post.comment_count -= 1
     db.delete(comment)
     db.commit()
     return {"message": "Comment deleted"}

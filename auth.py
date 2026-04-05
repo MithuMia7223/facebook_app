@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy.orm import Session
-from .db import get_db
-from .models import User
+
+try:
+    from .db import get_db
+    from .models import User
+except ImportError:
+    from db import get_db
+    from models import User
 
 router = APIRouter()
 security = HTTPBasic()
