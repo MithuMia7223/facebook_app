@@ -94,5 +94,6 @@ def poll_messages():
 
     main.after(100, poll_messages)
 
+
 poll_messages()
 main.mainloop()
