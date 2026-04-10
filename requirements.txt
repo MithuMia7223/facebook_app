@@ -1,3 +1,5 @@
 SQLAlchemy
 fastapi[standard]
 requests
+websockets
+asyncio

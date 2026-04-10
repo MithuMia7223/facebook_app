@@ -13,7 +13,9 @@ def _auth_tuple():
     return (user, pwd)
 
 
-def build_profile(profile_page, profile_text):
+def build_profile(
+    profile_page, profile_text, fb, login_page, signup_page, posts_page, friends_page
+):
     name_entry = Entry(profile_page, width=40)
     bio_entry = Entry(profile_page, width=60)
 
@@ -22,6 +24,20 @@ def build_profile(profile_page, profile_text):
 
     Label(profile_page, text="Bio").pack(pady=3)
     bio_entry.pack(pady=3)
+
+    def logout():
+        config.signed_in_username = None
+        config.signed_in_password = None
+        config.signed_in_user_id = None
+        fb.forget(profile_page)
+        fb.forget(posts_page)
+        fb.forget(friends_page)
+        fb.add(login_page, text="Login")
+        fb.add(signup_page, text="Signup")
+        fb.select(login_page)
+        messagebox.showinfo("Logout", "Logged out successfully")
+
+    Button(profile_page, text="Logout", command=logout).pack(pady=10)
 
     def load_profile():
         auth = _auth_tuple()

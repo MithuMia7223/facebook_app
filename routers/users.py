@@ -4,12 +4,12 @@ from sqlalchemy.exc import IntegrityError
 
 try:
     from ..db import get_db
-    from ..models import User, friend_table
+    from ..models import User, friend_table, FriendRequest
     from ..dtos import UserCreate, UserUpdate, UserGetMeResponse
     from ..auth import read_current_user
 except ImportError:
     from db import get_db
-    from models import User, friend_table
+    from models import User, friend_table, FriendRequest
     from dtos import UserCreate, UserUpdate, UserGetMeResponse
     from auth import read_current_user
 
@@ -86,19 +86,166 @@ def add_friend(
     db: Session = Depends(get_db),
     current_user: User = Depends(read_current_user),
 ):
+    # Backward-compatible endpoint: now this creates a friend request.
     if id != current_user.id:
         raise HTTPException(status_code=401, detail="Unauthorized")
     if id == friend_id:
         raise HTTPException(status_code=400, detail="You cannot add yourself")
+
     user = db.query(User).filter(User.id == id).first()
-    friend = db.query(User).filter(User.id == friend_id).first()
-    if not user or not friend:
+    target = db.query(User).filter(User.id == friend_id).first()
+    if not user or not target:
         raise HTTPException(status_code=404, detail="User not found")
-    if friend not in user.friends:
-        user.friends.append(friend)
-        friend.friends.append(user)
-        db.commit()
-    return {"message": "Friend added"}
+    if target in user.friends:
+        raise HTTPException(status_code=400, detail="Already friends")
+
+    existing_same_direction = (
+        db.query(FriendRequest)
+        .filter(
+            FriendRequest.sender_id == id,
+            FriendRequest.receiver_id == friend_id,
+        )
+        .first()
+    )
+    if existing_same_direction:
+        return {"message": "Friend request already sent"}
+
+    incoming_from_target = (
+        db.query(FriendRequest)
+        .filter(
+            FriendRequest.sender_id == friend_id,
+            FriendRequest.receiver_id == id,
+        )
+        .first()
+    )
+    if incoming_from_target:
+        raise HTTPException(
+            status_code=400,
+            detail="This user already sent you a request. Accept it from requests.",
+        )
+
+    request = FriendRequest(sender_id=id, receiver_id=friend_id)
+    db.add(request)
+    db.commit()
+    return {"message": "Friend request sent"}
+
+
+@router.post("/{id}/friend-requests/{target_id}")
+def send_friend_request(
+    id: int,
+    target_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(read_current_user),
+):
+    return add_friend(id=id, friend_id=target_id, db=db, current_user=current_user)
+
+
+@router.get("/{id}/friend-requests/incoming")
+def get_incoming_friend_requests(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(read_current_user),
+):
+    if id != current_user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    requests = (
+        db.query(FriendRequest)
+        .filter(FriendRequest.receiver_id == id)
+        .order_by(FriendRequest.id.desc())
+        .all()
+    )
+    data = []
+    for request in requests:
+        sender = db.query(User).filter(User.id == request.sender_id).first()
+        data.append(
+            {
+                "request_id": request.id,
+                "sender_id": request.sender_id,
+                "sender_username": sender.username if sender else "",
+            }
+        )
+    return {"total": len(data), "data": data}
+
+
+@router.get("/{id}/friend-requests/outgoing")
+def get_outgoing_friend_requests(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(read_current_user),
+):
+    if id != current_user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    requests = (
+        db.query(FriendRequest)
+        .filter(FriendRequest.sender_id == id)
+        .order_by(FriendRequest.id.desc())
+        .all()
+    )
+    data = []
+    for request in requests:
+        receiver = db.query(User).filter(User.id == request.receiver_id).first()
+        data.append(
+            {
+                "request_id": request.id,
+                "receiver_id": request.receiver_id,
+                "receiver_username": receiver.username if receiver else "",
+            }
+        )
+    return {"total": len(data), "data": data}
+
+
+@router.post("/{id}/friend-requests/{request_id}/accept")
+def accept_friend_request(
+    id: int,
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(read_current_user),
+):
+    if id != current_user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    request = db.query(FriendRequest).filter(FriendRequest.id == request_id).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+    if request.receiver_id != id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    user = db.query(User).filter(User.id == id).first()
+    sender = db.query(User).filter(User.id == request.sender_id).first()
+    if not user or not sender:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if sender not in user.friends:
+        user.friends.append(sender)
+    if user not in sender.friends:
+        sender.friends.append(user)
+
+    db.delete(request)
+    db.commit()
+    return {"message": "Friend request accepted"}
+
+
+@router.delete("/{id}/friend-requests/{request_id}")
+def delete_friend_request(
+    id: int,
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(read_current_user),
+):
+    if id != current_user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    request = db.query(FriendRequest).filter(FriendRequest.id == request_id).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+    if request.receiver_id != id and request.sender_id != id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    db.delete(request)
+    db.commit()
+    return {"message": "Friend request removed"}
 
 
 @router.get("/{id}/friends")

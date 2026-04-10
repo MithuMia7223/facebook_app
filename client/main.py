@@ -5,6 +5,9 @@ import auth
 import profile
 import posts
 import friends
+import ws
+import json
+import threading
 
 main = Tk()
 main.title("Social App")
@@ -20,10 +23,14 @@ profile_page = ttk.Frame(fb)
 posts_page = ttk.Frame(fb)
 friends_page = ttk.Frame(fb)
 
+
 fb.add(login_page, text="Login")
 fb.add(signup_page, text="Signup")
 
+
 profile_text = Text(profile_page, height=10)
+profile_text.pack(fill="both", expand=True)
+
 
 new_post_entry = Entry(posts_page, width=50)
 new_post_entry.pack(pady=10)
@@ -58,8 +65,34 @@ auth.build_auth(
     None,
 )
 
-profile.build_profile(profile_page, profile_text)
+profile.build_profile(
+    profile_page, profile_text, fb, login_page, signup_page, posts_page, friends_page
+)
 posts.build_posts(posts_page, posts_table, new_post_entry)
 friends.build_friends(friends_page, friends_table, friend_entry)
 
+threading.Thread(target=ws.start_listening, daemon=True).start()
+
+
+def poll_messages():
+    try:
+        message = ws.messages.get_nowait()
+    except:
+        main.after(100, poll_messages)
+        return
+
+    try:
+        print("Polling message: ", message)
+        payload = json.loads(message)
+
+        if payload.get("event") == "post:new":
+            posts.messages.put(message)
+            pass
+
+    except:
+        print("Could not parse message: " + message)
+
+    main.after(100, poll_messages)
+
+poll_messages()
 main.mainloop()

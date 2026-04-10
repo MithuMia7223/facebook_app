@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Table, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Table, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 try:
@@ -94,5 +94,15 @@ class Comment(Base):
     )
     # likes_count
 
+
+class FriendRequest(Base):
+    __tablename__ = "friend_requests"
+    __table_args__ = (
+        UniqueConstraint("sender_id", "receiver_id", name="uq_sender_receiver_request"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
 Base.metadata.create_all(bind=engine)

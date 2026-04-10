@@ -1,4 +1,4 @@
-from tkinter import Button, Frame, messagebox
+from tkinter import Button, Frame, Label, messagebox, ttk
 import requests
 
 import config
@@ -28,9 +28,15 @@ def _current_user_id(auth):
 
 
 def build_friends(friends_page, friends_table, friend_entry):
+    requests_table = None
+
     def clear_friends_table():
         for item in friends_table.get_children():
             friends_table.delete(item)
+
+    def clear_requests_table():
+        for item in requests_table.get_children():
+            requests_table.delete(item)
 
     def load_friends():
         auth = _auth_tuple()
@@ -62,7 +68,7 @@ def build_friends(friends_page, friends_table, friend_entry):
         except Exception as e:
             messagebox.showerror("Friends", str(e))
 
-    def add_friend():
+    def send_friend_request():
         auth = _auth_tuple()
         if not auth:
             messagebox.showwarning("Friends", "Please login first")
@@ -96,16 +102,113 @@ def build_friends(friends_page, friends_table, friend_entry):
                 return
 
             r = requests.post(
-                f"{config.API_BASE_URL}/users/{user_id}/friends/{friend_id}",
+                f"{config.API_BASE_URL}/users/{user_id}/friend-requests/{friend_id}",
                 auth=auth,
             )
             if r.status_code not in [200, 201]:
                 messagebox.showerror("Friends", r.text)
                 return
 
+            messagebox.showinfo("Friends", "Friend request sent")
             friend_entry.delete(0, "end")
-            load_friends()
+            load_incoming_requests()
 
+        except Exception as e:
+            messagebox.showerror("Friends", str(e))
+
+    def load_incoming_requests():
+        auth = _auth_tuple()
+        if not auth:
+            messagebox.showwarning("Friends", "Please login first")
+            return
+
+        try:
+            user_id = _current_user_id(auth)
+            if not user_id:
+                messagebox.showerror("Friends", "User ID not found")
+                return
+
+            r = requests.get(
+                f"{config.API_BASE_URL}/users/{user_id}/friend-requests/incoming",
+                auth=auth,
+            )
+            if r.status_code != 200:
+                messagebox.showerror("Friends", r.text)
+                return
+
+            clear_requests_table()
+            data = r.json().get("data", [])
+            for req in data:
+                request_id = str(req.get("request_id"))
+                sender_id = req.get("sender_id")
+                sender_username = req.get("sender_username", "")
+                requests_table.insert(
+                    "",
+                    "end",
+                    iid=request_id,
+                    values=(request_id, sender_id, sender_username),
+                )
+        except Exception as e:
+            messagebox.showerror("Friends", str(e))
+
+    def accept_selected_request():
+        auth = _auth_tuple()
+        if not auth:
+            messagebox.showwarning("Friends", "Please login first")
+            return
+
+        selected = requests_table.selection()
+        if not selected:
+            messagebox.showwarning("Friends", "Select a request first")
+            return
+
+        request_id = selected[0]
+        try:
+            user_id = _current_user_id(auth)
+            if not user_id:
+                messagebox.showerror("Friends", "User ID not found")
+                return
+
+            r = requests.post(
+                f"{config.API_BASE_URL}/users/{user_id}/friend-requests/{request_id}/accept",
+                auth=auth,
+            )
+            if r.status_code != 200:
+                messagebox.showerror("Friends", r.text)
+                return
+
+            load_incoming_requests()
+            load_friends()
+        except Exception as e:
+            messagebox.showerror("Friends", str(e))
+
+    def reject_selected_request():
+        auth = _auth_tuple()
+        if not auth:
+            messagebox.showwarning("Friends", "Please login first")
+            return
+
+        selected = requests_table.selection()
+        if not selected:
+            messagebox.showwarning("Friends", "Select a request first")
+            return
+
+        request_id = selected[0]
+        try:
+            user_id = _current_user_id(auth)
+            if not user_id:
+                messagebox.showerror("Friends", "User ID not found")
+                return
+
+            r = requests.delete(
+                f"{config.API_BASE_URL}/users/{user_id}/friend-requests/{request_id}",
+                auth=auth,
+            )
+            if r.status_code != 200:
+                messagebox.showerror("Friends", r.text)
+                return
+
+            load_incoming_requests()
         except Exception as e:
             messagebox.showerror("Friends", str(e))
 
@@ -144,8 +247,34 @@ def build_friends(friends_page, friends_table, friend_entry):
     actions = Frame(friends_page)
     actions.pack(pady=5)
 
-    Button(actions, text="Add Friend", command=add_friend).pack(side="left", padx=5)
+    Button(actions, text="Send Request", command=send_friend_request).pack(
+        side="left", padx=5
+    )
     Button(actions, text="Refresh", command=load_friends).pack(side="left", padx=5)
     Button(actions, text="Remove Selected", command=remove_selected_friend).pack(
         side="left", padx=5
     )
+
+    Label(friends_page, text="Incoming Friend Requests").pack(pady=6)
+    requests_table = ttk.Treeview(
+        friends_page,
+        columns=("Request ID", "From ID", "Username"),
+        show="headings",
+        height=6,
+    )
+    requests_table.heading("Request ID", text="Request ID")
+    requests_table.heading("From ID", text="From ID")
+    requests_table.heading("Username", text="Username")
+    requests_table.pack(fill="both", expand=True, pady=4)
+
+    request_actions = Frame(friends_page)
+    request_actions.pack(pady=5)
+    Button(
+        request_actions, text="Load Requests", command=load_incoming_requests
+    ).pack(side="left", padx=5)
+    Button(
+        request_actions, text="Accept Request", command=accept_selected_request
+    ).pack(side="left", padx=5)
+    Button(
+        request_actions, text="Reject Request", command=reject_selected_request
+    ).pack(side="left", padx=5)
