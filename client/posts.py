@@ -6,6 +6,11 @@ import config
 
 messages = queue.Queue()
 
+#TODO: Likes individual post comments
+#TODO: Accoutn delete/ deactivate
+#TODO: Friend request eligibility 
+
+
 
 def _auth_tuple():
     user = getattr(config, "signed_in_username", "")
@@ -159,7 +164,7 @@ def build_posts(posts_page, posts_table, new_post_entry):
         except Exception as e:
             messagebox.showerror("Posts", str(e))
 
-    # ================= VIEW DETAILS =================
+
     def view_details():
         post_id = _get_selected_post_id()
         if not post_id:
@@ -195,9 +200,11 @@ def build_posts(posts_page, posts_table, new_post_entry):
                 display_box.delete("1.0", "end")
 
                 try:
-                    r = requests.get(f"{config.API_BASE_URL}/posts/{post_id}")
+                    r = requests.get(f"{config.API_BASE_URL}/posts/{post_id}/likes")
                     if r.status_code == 200:
                         data = r.json()
+                        print("likes data:" + str(data))
+
 
                         display_box.insert("end", "❤️ LIKES INFO\n\n")
                         display_box.insert("end", f"Total Likes: {data.get('likes_count', 0)}\n\n")
@@ -249,6 +256,7 @@ def build_posts(posts_page, posts_table, new_post_entry):
         except Exception as e:
             messagebox.showerror("Posts", str(e))
 
+    # ================= UI =================
     actions = Frame(posts_page)
     actions.pack(pady=5)
 

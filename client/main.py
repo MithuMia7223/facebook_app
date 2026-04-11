@@ -1,6 +1,7 @@
 from tkinter import *
 from tkinter import ttk, Text
 from auth import build_auth
+from setting import open_setting
 import auth
 import profile
 import posts
@@ -8,14 +9,29 @@ import friends
 import ws
 import json
 import threading
+import setting
+
+
+
+
+
 
 main = Tk()
 main.title("Social App")
 main.geometry("900x650")
 
+top_bar = Frame(main)
+top_bar.pack(fill="x")
+
+Button(top_bar, text="Setting", command=lambda: open_setting(main)).pack(side="right", padx=10, pady=5)
+
+
+
 
 fb = ttk.Notebook(main)
 fb.pack(fill="both", expand=True)
+
+
 
 login_page = ttk.Frame(fb)
 signup_page = ttk.Frame(fb)
@@ -26,6 +42,8 @@ friends_page = ttk.Frame(fb)
 
 fb.add(login_page, text="Login")
 fb.add(signup_page, text="Signup")
+
+fb.select(login_page)
 
 
 profile_text = Text(profile_page, height=10)
@@ -93,6 +111,8 @@ def poll_messages():
         print("Could not parse message: " + message)
 
     main.after(100, poll_messages)
+
+
 
 
 poll_messages()

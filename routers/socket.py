@@ -49,4 +49,3 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
         await manager.broadcast("A client left the chat")
         
-

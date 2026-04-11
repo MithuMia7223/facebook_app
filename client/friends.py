@@ -100,6 +100,17 @@ def build_friends(friends_page, friends_table, friend_entry):
             if not friend_id:
                 messagebox.showerror("Friends", "Friend not found")
                 return
+            if user_id == friend_id:
+                messagebox.showerror("Friends", "You connot add yourself")
+                return
+            r = requests.get(
+                f"{config.API_BASE_URL}/users/{user_id}/friend-requests/incoming",auth=auth
+            )
+            if r.status_code == 200:
+                requests_data = r.json().get("data", [])
+                if any(req["sender_id"] == friend_id for req in requests_data):
+                 messagebox.showwarning("Friends", "Request already pending")
+                 return
 
             r = requests.post(
                 f"{config.API_BASE_URL}/users/{user_id}/friend-requests/{friend_id}",
@@ -278,3 +289,4 @@ def build_friends(friends_page, friends_table, friend_entry):
     Button(
         request_actions, text="Reject Request", command=reject_selected_request
     ).pack(side="left", padx=5)
+    
