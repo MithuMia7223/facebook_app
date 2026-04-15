@@ -1,6 +1,6 @@
-from tkinter import Button, Entry, Label, messagebox
+from tkinter import Button, Entry, Label, messagebox, Frame, filedialog
+from PIL import Image, ImageTk
 import requests
-
 import config
 
 
@@ -16,6 +16,13 @@ def _auth_tuple():
 def build_profile(
     profile_page, profile_text, fb, login_page, signup_page, posts_page, friends_page
 ):
+    
+    frame = Frame(profile_page)
+    frame.pack(pady=10)
+    
+    avatar_label = Label(frame, text="No Avatar")
+    avatar_label.pack(pady=5)
+
     name_entry = Entry(profile_page, width=40)
     bio_entry = Entry(profile_page, width=60)
 
@@ -25,19 +32,6 @@ def build_profile(
     Label(profile_page, text="Bio").pack(pady=3)
     bio_entry.pack(pady=3)
 
-    def logout():
-        config.signed_in_username = None
-        config.signed_in_password = None
-        config.signed_in_user_id = None
-        fb.forget(profile_page)
-        fb.forget(posts_page)
-        fb.forget(friends_page)
-        fb.add(login_page, text="Login")
-        fb.add(signup_page, text="Signup")
-        fb.select(login_page)
-        messagebox.showinfo("Logout", "Logged out successfully")
-
-    Button(profile_page, text="Logout", command=logout).pack(pady=10)
 
     def load_profile():
         auth = _auth_tuple()
@@ -69,6 +63,22 @@ def build_profile(
 
             bio_entry.delete(0, "end")
             bio_entry.insert(0, data.get("bio", "") or "")
+
+            avatar_url = data.get("avatar")
+
+            if avatar_url:
+                try:
+                    img_data = requests.get(avatar_url, stream=True).raw
+                    img = Image.open(img_data)
+                    img = ImageTk.PhotoImage(img)
+                    photo = ImageTk.Photo(img)
+
+                    avatar_label.config(image=photo, text="")
+                    avatar_label.image = photo
+                except Exception:
+                    avatar_label.config(text="Image Error")
+                else:
+                    avatar_label.config(text="No Avatar")
 
         except Exception as e:
             messagebox.showerror("Profile", str(e))
@@ -112,6 +122,48 @@ def build_profile(
 
         except Exception as e:
             messagebox.showerror("Profile", str(e))
+    def upload_avatar():
+        auth = _auth_tuple()
+        if not auth:
+            messagebox.showerror("Profile", "Plase login first")
+            return
+        
+        file_path = filedialog.askopenfilename(
+            filetypes=[("Image Files", "*.png *.jpg *jpeg")]
+
+        )
+        if not file_path:
+            return
+        try:
+            files = {"file": open(file_path, "rb")}
+
+            r = requests.post(
+                f"{config.API_BASE_URL}/users/me/avatar",
+                files=files,
+                auth=auth
+            )
+            if r.status_code in [200, 201]:
+                messagebox.showerror("Profile", "Avatar uploaded")
+                load_profile()
+            else:
+                messagebox.showerror("Profile", r.text)
+        except Exception as e:
+            messagebox.showerror("Profile", str(e))
+    def logout():
+        config.signed_in_username = None
+        config.signed_in_password = None
+        config.signed_in_user_id = None
+        fb.forget(profile_page)
+        fb.forget(posts_page)
+        fb.forget(friends_page)
+        fb.add(login_page, text="Login")
+        fb.add(signup_page, text="Signup")
+        fb.select(login_page)
+        messagebox.showinfo("Logout", "Logged out successfully")
+
+    Button(profile_page, text="Logout", command=logout).pack(pady=10)
+    Button(profile_text, text="Upload Avatar", command=upload_avatar).pack(pady=4)
 
     Button(profile_page, text="Load Profile", command=load_profile).pack(pady=4)
     Button(profile_page, text="Update Profile", command=update_profile).pack(pady=4)
+    return load_profile
