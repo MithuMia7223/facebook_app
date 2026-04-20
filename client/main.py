@@ -12,10 +12,6 @@ import threading
 import setting
 
 
-
-
-
-
 main = Tk()
 main.title("Social App")
 main.geometry("900x650")
@@ -111,8 +107,6 @@ def poll_messages():
         print("Could not parse message: " + message)
 
     main.after(100, poll_messages)
-
-
 
 
 poll_messages()

@@ -284,9 +284,8 @@ def build_friends(friends_page, friends_table, friend_entry):
         request_actions, text="Load Requests", command=load_incoming_requests
     ).pack(side="left", padx=5)
     Button(
-        request_actions, text="Accept Request", command=accept_selected_request
+        request_actions, text="Accept Request", command=accept_selected_request,
     ).pack(side="left", padx=5)
     Button(
         request_actions, text="Reject Request", command=reject_selected_request
     ).pack(side="left", padx=5)
-    
