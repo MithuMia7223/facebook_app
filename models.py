@@ -1,4 +1,17 @@
-from sqlalchemy import Column, Integer, String, Table, Text, ForeignKey, UniqueConstraint
+from datetime import datetime
+
+
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Table,
+    Text,
+    ForeignKey,
+    UniqueConstraint,
+    Boolean,
+    DateTime,
+)
 from sqlalchemy.orm import relationship
 
 try:
@@ -36,11 +49,23 @@ class User(Base):
     username = Column(String, nullable=False, unique=True)
     password = Column(String, nullable=False)
     bio = Column(Text, nullable=True)
+
+    avatar_url = Column(String, nullable=True)
+    cover_url = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+
+    is_active = Column(Boolean, default=True)
+    is_deleted = Column(Boolean, default=False)
+    is_private = Column(Boolean, default=False)
+
     posts = relationship("Post", back_populates="author")
     # posts_count
     comments = relationship("Comment", back_populates="author")
     post_count = Column(Integer, insert_default=0)
     comment_count = Column(Integer, insert_default=0)
+    friend_count = Column(Integer, insert_default=0)
+    followers_count = Column(Integer, default=0)
+    joined_date = Column(DateTime, default=datetime.utcnow)
 
     friends = relationship(
         "User",
@@ -104,5 +129,6 @@ class FriendRequest(Base):
     id = Column(Integer, primary_key=True)
     sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
 
 Base.metadata.create_all(bind=engine)

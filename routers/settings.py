@@ -40,7 +40,7 @@ def reactivate_account(
 
 
 @router.delete("/delete")
-def delete_accoutn(
+def delete_account(
     current_user: User = Depends(read_current_user),
     db: Session = Depends(get_db),
 ):

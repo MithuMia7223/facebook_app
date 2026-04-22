@@ -2,6 +2,7 @@ from tkinter import *
 from tkinter import ttk, Text
 from auth import build_auth
 from setting import open_setting
+
 import auth
 import profile
 import posts
@@ -19,14 +20,13 @@ main.geometry("900x650")
 top_bar = Frame(main)
 top_bar.pack(fill="x")
 
-Button(top_bar, text="Setting", command=lambda: open_setting(main)).pack(side="right", padx=10, pady=5)
-
-
+Button(top_bar, text="Setting", command=lambda: open_setting(main)).pack(
+    side="right", padx=10, pady=5
+)
 
 
 fb = ttk.Notebook(main)
 fb.pack(fill="both", expand=True)
-
 
 
 login_page = ttk.Frame(fb)
