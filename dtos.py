@@ -13,6 +13,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     bio: Optional[str] = None
+    phone: Optional[str] = None
     avatar_url: Optional[str] = None
     cover_url: Optional[str] = None
     location: Optional[str] = None
@@ -31,6 +32,9 @@ class UserGetResponse(BaseModel):
     followers_count: int
     is_private: bool
     joined_date: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class UserOut(BaseModel):
@@ -67,6 +71,9 @@ class PostResponse(BaseModel):
     likes_count: int
     comment_count: int
 
+    class Config:
+        from_attributes = True
+
 
 class commentResponse(BaseModel):
 
@@ -75,3 +82,6 @@ class commentResponse(BaseModel):
     author_id: int
     post_id: int
     likes_count: int
+
+    class Config:
+        from_attributes = True

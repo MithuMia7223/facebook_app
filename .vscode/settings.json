@@ -3,6 +3,7 @@
     "deactive",
     "dtos",
     "jsonable",
+    "onupdate",
     "padx",
     "pady",
     "sessionmaker",

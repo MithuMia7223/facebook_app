@@ -1,6 +1,5 @@
 from datetime import datetime
 
-
 from sqlalchemy import (
     Column,
     Integer,
@@ -18,6 +17,7 @@ try:
     from .db import Base, engine
 except ImportError:
     from db import Base, engine
+
 
 friend_table = Table(
     "friends",
@@ -46,26 +46,30 @@ class User(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
-    username = Column(String, nullable=False, unique=True)
+    username = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
-    bio = Column(Text, nullable=True)
 
+    bio = Column(Text, nullable=True)
     avatar_url = Column(String, nullable=True)
     cover_url = Column(String, nullable=True)
     location = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
 
     is_active = Column(Boolean, default=True)
     is_deleted = Column(Boolean, default=False)
     is_private = Column(Boolean, default=False)
 
-    posts = relationship("Post", back_populates="author")
-    # posts_count
-    comments = relationship("Comment", back_populates="author")
-    post_count = Column(Integer, insert_default=0)
-    comment_count = Column(Integer, insert_default=0)
-    friend_count = Column(Integer, insert_default=0)
-    followers_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     joined_date = Column(DateTime, default=datetime.utcnow)
+
+    post_count = Column(Integer, default=0)
+    comment_count = Column(Integer, default=0)
+    friend_count = Column(Integer, default=0)
+    followers_count = Column(Integer, default=0)
+
+    posts = relationship("Post", back_populates="author")
+    comments = relationship("Comment", back_populates="author")
 
     friends = relationship(
         "User",
@@ -74,7 +78,6 @@ class User(Base):
         secondaryjoin=id == friend_table.c.friend_id,
         backref="friend_of",
     )
-    # store friends count
 
     likes_posts = relationship("Post", secondary=post_likes, back_populates="likes")
     likes_comments = relationship(
@@ -89,15 +92,15 @@ class Post(Base):
     content = Column(Text, nullable=False)
 
     likes_count = Column(Integer, default=0)
-    comment_count = Column(Integer, insert_default=0)
+    comment_count = Column(Integer, default=0)
 
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     author = relationship("User", back_populates="posts")
 
+    created_at = Column(DateTime, default=datetime.utcnow)
+
     comments = relationship("Comment", back_populates="post")
     likes = relationship("User", secondary=post_likes, back_populates="likes_posts")
-    # likes_count
-    # comments_count
 
 
 class Comment(Base):
@@ -114,21 +117,26 @@ class Comment(Base):
     author = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
 
+    created_at = Column(DateTime, default=datetime.utcnow)
+
     likes = relationship(
         "User", secondary=comment_likes, back_populates="likes_comments"
     )
-    # likes_count
 
 
 class FriendRequest(Base):
     __tablename__ = "friend_requests"
-    __table_args__ = (
-        UniqueConstraint("sender_id", "receiver_id", name="uq_sender_receiver_request"),
-    )
 
     id = Column(Integer, primary_key=True)
+
     sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("sender_id", "receiver_id", name="uq_sender_receiver"),
+    )
 
 
 Base.metadata.create_all(bind=engine)

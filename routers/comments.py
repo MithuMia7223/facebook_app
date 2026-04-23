@@ -43,6 +43,9 @@ def get_post_comments(
     offset: int = Query(0),
     db: Session = Depends(get_db),
 ):
+    post = db.query(Post).filter(Post.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
     comments = (
         db.query(Comment)
         .filter(Comment.post_id == post_id)
@@ -54,32 +57,32 @@ def get_post_comments(
     return {"total": total, "limit": limit, "offset": offset, "data": comments}
 
 
-@router.patch("/{id}")
+@router.patch("/{comment_id}")
 def update_comment(
-    id: int,
+    comment_id: int,
     data: CommentUpdate,
     current_user: User = Depends(read_current_user),
     db: Session = Depends(get_db),
 ):
-    comment = db.query(Comment).filter(Comment.id == id).first()
+    comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
     if comment.author_id != current_user.id:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    if data.content:
+    if data.content is not None:
         comment.content = data.content
     db.commit()
     db.refresh(comment)
     return comment
 
 
-@router.delete("/{id}")
+@router.delete("/{comment_id}")
 def delete_comment(
-    id: int,
+    comment_id: int,
     current_user: User = Depends(read_current_user),
     db: Session = Depends(get_db),
 ):
-    comment = db.query(Comment).filter(Comment.id == id).first()
+    comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
     if comment.author_id != current_user.id:

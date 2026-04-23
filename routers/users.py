@@ -2,17 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-
 try:
     from ..db import get_db
-    from ..models import User, friend_table, FriendRequest
-    from ..dtos import UserCreate, UserUpdate, UserGetResponse, UserOut
+    from ..models import User, FriendRequest
+    from ..dtos import UserCreate, UserUpdate, UserGetResponse
     from ..auth import read_current_user
-except Exception as e:
-    print("errored out with exception in users")
-    print(e)
+except:
     from db import get_db
-    from models import User, friend_table, FriendRequest
+    from models import User, FriendRequest
     from dtos import UserCreate, UserUpdate, UserGetResponse
     from auth import read_current_user
 
@@ -21,23 +18,24 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("/me", response_model=UserGetResponse)
 def get_me(current_user: User = Depends(read_current_user)):
-    return current_user
-
-
-@router.get("/users/me", response_model=UserOut)
-def get_me(current_user: User = Depends(read_current_user)):
     return {
         "id": current_user.id,
         "username": current_user.username,
-        "friends_count": 0,
+        "name": current_user.name,
+        "bio": current_user.bio,
+        "avatar_url": current_user.avatar_url,
+        "cover_url": current_user.cover_url,
+        "location": current_user.location,
+        "friend_count": len(current_user.friends) if current_user.friends else 0,
         "followers_count": 0,
+        "is_private": current_user.is_private,
         "joined_date": current_user.created_at,
     }
 
 
-@router.get("/{id}", response_model=UserGetResponse)
-def get_user(id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == id).first()
+@router.get("/{user_id}", response_model=UserGetResponse)
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -47,7 +45,11 @@ def get_user(id: int, db: Session = Depends(get_db)):
 
 @router.get("/username/{username}", response_model=UserGetResponse)
 def get_user_by_username(username: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == username).first()
+    user = (
+        db.query(User)
+        .filter(User.username == username, User.is_deleted == False)
+        .first()
+    )
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -55,14 +57,14 @@ def get_user_by_username(username: str, db: Session = Depends(get_db)):
     return user
 
 
-@router.patch("/{id}", response_model=UserGetResponse)
+@router.patch("/{user_id}", response_model=UserGetResponse)
 def update_user(
-    id: int,
+    user_id: int,
     data: UserUpdate,
     current_user: User = Depends(read_current_user),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.id == id).first()
+    user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -70,21 +72,22 @@ def update_user(
     if user.id != current_user.id:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    if data.name:
+    if data.name is not None:
         user.name = data.name
-    if data.bio:
+    if data.bio is not None:
         user.bio = data.bio
-    if data.avatar_url:
+    if data.avatar_url is not None:
         user.avatar_url = data.avatar_url
-    if data.cover_url:
+    if data.cover_url is not None:
         user.cover_url = data.cover_url
-    if data.location:
+    if data.location is not None:
         user.location = data.location
     if data.is_private is not None:
         user.is_private = data.is_private
 
     db.commit()
     db.refresh(user)
+
     return user
 
 
@@ -106,20 +109,20 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{id}/friends/{friend_id}")
+@router.post("/{user_id}/friends/{friend_id}")
 def send_friend_request(
-    id: int,
+    user_id: int,
     friend_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(read_current_user),
 ):
-    if id != current_user.id:
+    if user_id != current_user.id:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    if id == friend_id:
+    if user_id == friend_id:
         raise HTTPException(status_code=400, detail="You cannot add yourself")
 
-    user = db.query(User).filter(User.id == id).first()
+    user = db.query(User).filter(User.id == user_id).first()
     target = db.query(User).filter(User.id == friend_id).first()
 
     if not user or not target:
@@ -131,8 +134,7 @@ def send_friend_request(
     existing = (
         db.query(FriendRequest)
         .filter(
-            FriendRequest.sender_id == id,
-            FriendRequest.receiver_id == friend_id,
+            FriendRequest.sender_id == user_id, FriendRequest.receiver_id == friend_id
         )
         .first()
     )
@@ -143,8 +145,7 @@ def send_friend_request(
     reverse = (
         db.query(FriendRequest)
         .filter(
-            FriendRequest.sender_id == friend_id,
-            FriendRequest.receiver_id == id,
+            FriendRequest.sender_id == friend_id, FriendRequest.receiver_id == user_id
         )
         .first()
     )
@@ -152,51 +153,51 @@ def send_friend_request(
     if reverse:
         raise HTTPException(status_code=400, detail="User already sent you a request")
 
-    request = FriendRequest(sender_id=id, receiver_id=friend_id)
+    request = FriendRequest(sender_id=user_id, receiver_id=friend_id)
     db.add(request)
     db.commit()
 
     return {"message": "Friend request sent"}
 
 
-@router.get("/{id}/friend-requests/incoming")
+@router.get("/{user_id}/friend-requests/incoming")
 def incoming_requests(
-    id: int,
+    user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(read_current_user),
 ):
-    if id != current_user.id:
+    if user_id != current_user.id:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     requests = (
-        db.query(FriendRequest)
-        .filter(FriendRequest.receiver_id == id)
-        .order_by(FriendRequest.id.desc())
+        db.query(FriendRequest, User)
+        .join(User, FriendRequest.sender_id == User.id)
+        .filter(FriendRequest.receiver_id == user_id)
         .all()
     )
 
-    data = []
-    for r in requests:
-        sender = db.query(User).filter(User.id == r.sender_id).first()
-        data.append(
+    return {
+        "total": len(requests),
+        "data": [
             {
-                "request_id": r.id,
-                "sender_id": r.sender_id,
-                "sender_username": sender.username if sender else "",
+                "request_id": r.FriendRequest.id,
+                "sender_id": r.User.id,
+                "sender_username": r.User.username,
+                "sender_name": r.User.name,
             }
-        )
+            for r in requests
+        ],
+    }
 
-    return {"total": len(data), "data": data}
 
-
-@router.post("/{id}/friend-requests/{request_id}/accept")
+@router.post("/{user_id}/friend-requests/{request_id}/accept")
 def accept_request(
-    id: int,
+    user_id: int,
     request_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(read_current_user),
 ):
-    if id != current_user.id:
+    if user_id != current_user.id:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     request = db.query(FriendRequest).filter(FriendRequest.id == request_id).first()
@@ -204,10 +205,10 @@ def accept_request(
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    if request.receiver_id != id:
+    if request.receiver_id != user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    user = db.query(User).filter(User.id == id).first()
+    user = db.query(User).filter(User.id == user_id).first()
     sender = db.query(User).filter(User.id == request.sender_id).first()
 
     if sender not in user.friends:
@@ -221,9 +222,9 @@ def accept_request(
     return {"message": "Friend request accepted"}
 
 
-@router.delete("/{id}/friend-requests/{request_id}")
+@router.delete("/{user_id}/friend-requests/{request_id}")
 def delete_request(
-    id: int,
+    user_id: int,
     request_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(read_current_user),
@@ -233,7 +234,7 @@ def delete_request(
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    if request.sender_id != id and request.receiver_id != id:
+    if request.sender_id != user_id and request.receiver_id != user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     db.delete(request)
@@ -242,43 +243,47 @@ def delete_request(
     return {"message": "Friend request removed"}
 
 
-@router.get("/{id}/friends")
+@router.get("/{user_id}/friends")
 def get_friends(
-    id: int,
+    user_id: int,
     limit: int = Query(10),
     offset: int = Query(0),
     db: Session = Depends(get_db),
 ):
-    total = (
-        db.query(User)
-        .join(friend_table, User.id == friend_table.c.friend_id)
-        .filter(friend_table.c.user_id == id)
-        .count()
-    )
+    user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
 
-    friends = (
-        db.query(User)
-        .join(friend_table, User.id == friend_table.c.friend_id)
-        .filter(friend_table.c.user_id == id)
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    return {"total": total, "limit": limit, "offset": offset, "data": friends}
+    friends = user.friends[offset : offset + limit]
+
+    return {
+        "total": len(user.friends),
+        "limit": limit,
+        "offset": offset,
+        "data": [
+            {
+                "id": f.id,
+                "username": f.username,
+                "name": f.name,
+                "avatar_url": f.avatar_url,
+            }
+            for f in friends
+        ],
+    }
 
 
-@router.delete("/{id}/friends/{friend_id}")
+@router.delete("/{user_id}/friends/{friend_id}")
 def remove_friend(
-    id: int,
+    user_id: int,
     friend_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(read_current_user),
 ):
-    if id != current_user.id:
+    if user_id != current_user.id:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    user = db.query(User).filter(User.id == id).first()
+    user = db.query(User).filter(User.id == user_id).first()
     friend = db.query(User).filter(User.id == friend_id).first()
 
     if not user or not friend:
