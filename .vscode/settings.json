@@ -1,7 +1,9 @@
 {
   "cSpell.words": [
+    "asyncio",
     "deactive",
     "dtos",
+    "fastapi",
     "jsonable",
     "onupdate",
     "padx",

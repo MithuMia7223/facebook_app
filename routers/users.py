@@ -17,28 +17,39 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 
 @router.get("/me", response_model=UserGetResponse)
-def get_me(current_user: User = Depends(read_current_user)):
+def get_my_profile(
+    current_user: User = Depends(read_current_user), db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.id == current_user.id).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
     return {
-        "id": current_user.id,
-        "username": current_user.username,
-        "name": current_user.name,
-        "bio": current_user.bio,
-        "avatar_url": current_user.avatar_url,
-        "cover_url": current_user.cover_url,
-        "location": current_user.location,
-        "friend_count": len(current_user.friends) if current_user.friends else 0,
-        "followers_count": 0,
-        "is_private": current_user.is_private,
-        "joined_date": current_user.created_at,
+        "id": user.id,
+        "username": user.username,
+        "name": user.name,
+        "bio": user.bio,
+        "location": user.location,
+        "avatar_url": user.avatar_url,
+        "cover_url": user.cover_url,
+        "friend_count": len(user.friends or []),
+        "posts_count": len(user.posts or []),
+        "comments_count": len(user.comments or []),
+        "followers_count": user.followers_count or 0,
+        "is_private": user.is_private,
+        "joined_date": user.joined_date,
+        "friends": [],
+        "posts": [],
+        "comments": [],
     }
 
 
 @router.get("/{user_id}", response_model=UserGetResponse)
 def get_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
-
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(Status_code=404, detail="User not found")
 
     return user
 
@@ -50,43 +61,8 @@ def get_user_by_username(username: str, db: Session = Depends(get_db)):
         .filter(User.username == username, User.is_deleted == False)
         .first()
     )
-
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
-    return user
-
-
-@router.patch("/{user_id}", response_model=UserGetResponse)
-def update_user(
-    user_id: int,
-    data: UserUpdate,
-    current_user: User = Depends(read_current_user),
-    db: Session = Depends(get_db),
-):
-    user = db.query(User).filter(User.id == user_id).first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if user.id != current_user.id:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    if data.name is not None:
-        user.name = data.name
-    if data.bio is not None:
-        user.bio = data.bio
-    if data.avatar_url is not None:
-        user.avatar_url = data.avatar_url
-    if data.cover_url is not None:
-        user.cover_url = data.cover_url
-    if data.location is not None:
-        user.location = data.location
-    if data.is_private is not None:
-        user.is_private = data.is_private
-
-    db.commit()
-    db.refresh(user)
 
     return user
 
@@ -107,6 +83,32 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/{user_id}", response_model=UserGetResponse)
+def update_user(
+    user_id: int,
+    data: UserUpdate,
+    current_user: User = Depends(read_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.id != current_user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    for field in ["name", "bio", "avatar_url", "cover_url", "location", "is_private"]:
+        value = getattr(data, field, None)
+        if value is not None:
+            setattr(user, field, value)
+
+    db.commit()
+    db.refresh(user)
+
+    return user
 
 
 @router.post("/{user_id}/friends/{friend_id}")

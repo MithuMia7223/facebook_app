@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -24,25 +24,32 @@ class UserGetResponse(BaseModel):
     id: int
     username: str
     name: str
-    bio: Optional[str]
-    avatar_url: Optional[str]
-    cover_url: Optional[str]
-    location: Optional[str]
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    cover_url: Optional[str] = None
+    location: Optional[str] = None
+
     friend_count: int
+    posts_count: int 
+    comments_count: int
     followers_count: int
+
     is_private: bool
     joined_date: datetime
 
+    friends: List[dict] = Field(default_factory=list)
+    posts: List[dict] = Field(default_factory=list)
+    comments: List[dict] = Field(default_factory=list)
+
     class Config:
         from_attributes = True
-
 
 class UserOut(BaseModel):
     id: int
     username: str
     friend_count: Optional[int] = None
     followers_count: Optional[int] = None
-    joined_count: Optional[datetime] = None
+    joined_date: Optional[datetime] = None
 
     class Config:
         from_attributes = True
