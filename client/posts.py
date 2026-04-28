@@ -1,7 +1,7 @@
 import json
 import queue
 import requests
-from tkinter import Button, Entry, Frame, Label, messagebox
+from tkinter import Button, Entry, Frame, Label, Toplevel, messagebox
 import config
 
 messages = queue.Queue()
@@ -10,8 +10,6 @@ PAGE = 1
 LIMIT = 5
 SEARCH_QUERY = ""
 
-
-# ================= API =================
 
 
 def api_request(method, url, **kwargs):
@@ -39,28 +37,22 @@ def api_delete(url, auth=None):
     return api_request("DELETE", url, auth=auth)
 
 
-# ================= AUTH =================
-
-
 def _auth_tuple():
     user = getattr(config, "signed_in_username", "")
     pwd = getattr(config, "signed_in_password", "")
     return (user, pwd) if user and pwd else None
 
 
-# ================= MAIN =================
 
 
 def build_posts(posts_page, posts_container, new_post_entry):
 
     global PAGE, SEARCH_QUERY
 
-    # ================= CLEAR =================
     def clear_posts():
         for w in posts_container.winfo_children():
             w.destroy()
 
-    # ================= LOAD POSTS =================
     def load_posts():
         res = api_get("/posts/", {"page": PAGE, "limit": LIMIT, "search": SEARCH_QUERY})
 
@@ -76,15 +68,39 @@ def build_posts(posts_page, posts_container, new_post_entry):
         for p in data:
             create_post_card(p)
 
-    # ================= POST CARD =================
+    def open_post_detail(p):
+        win = Toplevel()
+        win.title("Post Details")
+
+        Label(win, text=p.get("content"), font=("Arial", 14)).pack()
+
+        if p.get("image_url"):
+            Label(win, text=f"🖼 {p['image_url']}").pack()
+
+        Label(win, text=f"👤 {p.get('author','Unknown')}").pack()
+        Label(win, text=f"📅 {p.get('created_at','')}").pack()
+
+        Label(win, text=f"👍 Likes: {p.get('likes_count',0)}").pack()
+        Label(win, text=f"💬 Comments: {p.get('comment_count',0)}").pack()
+
+        Label(
+            win,
+            text=f"❤️ {p.get('love_reaction',0)} 😂 {p.get('haha_reaction',0)} 😮 {p.get('wow_reaction',0)}",
+        ).pack()
     def create_post_card(p):
         post_id = p.get("id")
 
-        frame = Frame(posts_container, bd=1, relief="solid", padx=10, pady=5)
+        frame = Frame(posts_container, bd=1, relief="solid", padx=10, pady=8)
         frame.pack(fill="x", pady=5)
 
+        Label(frame, text=p.get("content", ""),font=("Arial", 12, "bold")).pack(anchor="w")
+
         Label(frame, text=p.get("content", ""), font=("Arial", 12)).pack(anchor="w")
-        Label(frame, text=f"👤 {p.get('author','Unknown')}").pack(anchor="w")
+        Label(frame, text=f"👤 {p.get('author','Unknown')}| 📅 {p.get('created_at','')}").pack(anchor="w")
+
+        if p.get("image_url"):
+            Label(frame, text=f"🖼 {p['image_url']}").pack(anchor="w")
+
 
         like_label = Label(frame, text=f"👍 {p.get('likes_count',0)}")
         like_label.pack(anchor="w")
@@ -92,9 +108,15 @@ def build_posts(posts_page, posts_container, new_post_entry):
         comment_label = Label(frame, text=f"💬 {p.get('comments_count',0)}")
         comment_label.pack(anchor="w")
 
+        Label(
+            frame,
+            text=f"❤️ {p.get('love_reaction',0)}  😂 {p.get('haha_reaction',0)}  😮 {p.get('wow_reaction',0)}",
+        ).pack(anchor="w")
+
         liked = False
 
-        # ================= LIKE / UNLIKE =================
+
+        
         def toggle_like():
             nonlocal liked
 
@@ -120,7 +142,7 @@ def build_posts(posts_page, posts_container, new_post_entry):
                     p["likes_count"] = new_count
                     like_label.config(text=f"👍 {new_count}")
 
-        # ================= COMMENT =================
+        
         def comment_post():
             auth = _auth_tuple()
             if not auth:
@@ -139,7 +161,7 @@ def build_posts(posts_page, posts_container, new_post_entry):
                 p["comments_count"] = new_count
                 comment_label.config(text=f"💬 {new_count}")
 
-        # ================= EDIT =================
+        
         def edit_post():
             auth = _auth_tuple()
             if not auth:
@@ -173,8 +195,10 @@ def build_posts(posts_page, posts_container, new_post_entry):
         Button(btn, text="Comment 💬", command=comment_post).pack(side="left", padx=5)
         Button(btn, text="Edit ✏️", command=edit_post).pack(side="left", padx=5)
         Button(btn, text="Delete 🗑", command=delete_post).pack(side="left", padx=5)
+        Button(btn, text="View🔍", command=lambda: open_post_detail(p)).pack(side="left")
 
-        # ================= COMMENT INPUT =================
+
+        
         comment_box = Frame(frame)
         comment_box.pack(anchor="w", pady=5)
 
@@ -217,7 +241,7 @@ def build_posts(posts_page, posts_container, new_post_entry):
             PAGE -= 1
         load_posts()
 
-    # ================= UI =================
+    
     top = Frame(posts_page)
     top.pack(pady=5)
 
@@ -238,10 +262,10 @@ def build_posts(posts_page, posts_container, new_post_entry):
     Button(nav, text="Prev", command=prev_page).pack(side="left")
     Button(nav, text="Next", command=next_page).pack(side="left")
 
-    # INIT LOAD
+
     load_posts()
 
-    # ================= SOCKET =================
+    
     def poll_messages():
         try:
             msg = messages.get_nowait()
