@@ -1,292 +1,253 @@
 import json
 import queue
-from tkinter import Button, Entry, Frame, Label, messagebox, Toplevel, Text
 import requests
+from tkinter import Button, Entry, Frame, Label, messagebox
 import config
 
 messages = queue.Queue()
 
-#TODO: Likes individual post comments
-#TODO: Accoutn delete/ deactivate
-#TODO: Friend request eligibility 
+PAGE = 1
+LIMIT = 5
+SEARCH_QUERY = ""
 
+
+# ================= API =================
+
+
+def api_request(method, url, **kwargs):
+    try:
+        return requests.request(
+            method, f"{config.API_BASE_URL}{url}", timeout=5, **kwargs
+        )
+    except Exception as e:
+        messagebox.showerror("API Error", str(e))
+
+
+def api_get(url, params=None):
+    return api_request("GET", url, params=params)
+
+
+def api_post(url, data=None, auth=None):
+    return api_request("POST", url, json=data, auth=auth)
+
+
+def api_put(url, data=None, auth=None):
+    return api_request("PUT", url, json=data, auth=auth)
+
+
+def api_delete(url, auth=None):
+    return api_request("DELETE", url, auth=auth)
+
+
+# ================= AUTH =================
 
 
 def _auth_tuple():
     user = getattr(config, "signed_in_username", "")
     pwd = getattr(config, "signed_in_password", "")
-    if not user or not pwd:
-        return None
-    return (user, pwd)
+    return (user, pwd) if user and pwd else None
 
 
-def build_posts(posts_page, posts_table, new_post_entry):
+# ================= MAIN =================
 
-    def _get_selected_post_id():
-        selected = posts_table.selection()
-        if selected:
-            return selected[0]
 
-        focused = posts_table.focus()
-        if focused:
-            return focused
+def build_posts(posts_page, posts_container, new_post_entry):
 
-        rows = posts_table.get_children()
-        if rows:
-            first = rows[0]
-            posts_table.selection_set(first)
-            posts_table.focus(first)
-            return first
+    global PAGE, SEARCH_QUERY
 
-        return None
+    # ================= CLEAR =================
+    def clear_posts():
+        for w in posts_container.winfo_children():
+            w.destroy()
 
-    def clear_posts_table():
-        for item in posts_table.get_children():
-            posts_table.delete(item)
+    # ================= LOAD POSTS =================
+    def load_posts():
+        res = api_get("/posts/", {"page": PAGE, "limit": LIMIT, "search": SEARCH_QUERY})
 
-    def _get_comment_count(post_id):
-        try:
-            r = requests.get(f"{config.API_BASE_URL}/comments/posts/{post_id}")
-            if r.status_code != 200:
-                return 0
-            return r.json().get("total", 0)
-        except:
-            return 0
+        if not res or res.status_code != 200:
+            return messagebox.showerror("Posts", "Failed loading posts")
 
-    def load_posts_table():
-        try:
-            r = requests.get(f"{config.API_BASE_URL}/posts/")
-            if r.status_code != 200:
-                clear_posts_table()
-                messagebox.showerror("Posts", r.text)
+        clear_posts()
+
+        data = res.json()
+        if isinstance(data, dict):
+            data = data.get("posts", [])
+
+        for p in data:
+            create_post_card(p)
+
+    # ================= POST CARD =================
+    def create_post_card(p):
+        post_id = p.get("id")
+
+        frame = Frame(posts_container, bd=1, relief="solid", padx=10, pady=5)
+        frame.pack(fill="x", pady=5)
+
+        Label(frame, text=p.get("content", ""), font=("Arial", 12)).pack(anchor="w")
+        Label(frame, text=f"👤 {p.get('author','Unknown')}").pack(anchor="w")
+
+        like_label = Label(frame, text=f"👍 {p.get('likes_count',0)}")
+        like_label.pack(anchor="w")
+
+        comment_label = Label(frame, text=f"💬 {p.get('comments_count',0)}")
+        comment_label.pack(anchor="w")
+
+        liked = False
+
+        # ================= LIKE / UNLIKE =================
+        def toggle_like():
+            nonlocal liked
+
+            auth = _auth_tuple()
+            if not auth:
+                return messagebox.showwarning("Auth", "Login required")
+
+            if not liked:
+                res = api_post(f"/posts/{post_id}/likes", {}, auth)
+
+                if res and res.status_code in (200, 201):
+                    liked = True
+                    new_count = int(p.get("likes_count", 0)) + 1
+                    p["likes_count"] = new_count
+                    like_label.config(text=f"👍 {new_count}")
+
+            else:
+                res = api_delete(f"/posts/{post_id}/likes", auth)
+
+                if res and res.status_code == 200:
+                    liked = False
+                    new_count = max(0, int(p.get("likes_count", 0)) - 1)
+                    p["likes_count"] = new_count
+                    like_label.config(text=f"👍 {new_count}")
+
+        # ================= COMMENT =================
+        def comment_post():
+            auth = _auth_tuple()
+            if not auth:
+                return messagebox.showwarning("Auth", "Login required")
+
+            text = comment_entry.get().strip()
+            if not text:
+                return messagebox.showwarning("Comment", "Write comment first")
+
+            res = api_post(f"/comments/posts/{post_id}", {"content": text}, auth)
+
+            if res and res.status_code in (200, 201):
+                comment_entry.delete(0, "end")
+
+                new_count = int(p.get("comments_count", 0)) + 1
+                p["comments_count"] = new_count
+                comment_label.config(text=f"💬 {new_count}")
+
+        # ================= EDIT =================
+        def edit_post():
+            auth = _auth_tuple()
+            if not auth:
                 return
 
-            clear_posts_table()
-            posts = r.json()
+            text = new_post_entry.get().strip()
+            if not text:
+                return
 
-            for post in posts:
-                post_id = str(post.get("id"))
-                posts_table.insert(
-                    "",
-                    "end",
-                    iid=post_id,
-                    values=(
-                        post.get("content", ""),
-                        post.get("likes_count", 0),
-                        _get_comment_count(post_id),
-                    ),
-                )
+            res = api_put(f"/posts/{post_id}", {"content": text}, auth)
+            if res and res.status_code == 200:
+                load_posts()
 
-        except Exception as e:
-            messagebox.showerror("Posts", str(e))
+        # ================= DELETE =================
+        def delete_post():
+            auth = _auth_tuple()
+            if not auth:
+                return
 
+            res = api_delete(f"/posts/{post_id}", auth)
+            if res and res.status_code == 200:
+                load_posts()
+
+        # ================= BUTTONS =================
+        btn = Frame(frame)
+        btn.pack(anchor="w", pady=5)
+
+        Button(btn, text="Like ❤️ / Unlike 💔", command=toggle_like).pack(
+            side="left", padx=5
+        )
+        Button(btn, text="Comment 💬", command=comment_post).pack(side="left", padx=5)
+        Button(btn, text="Edit ✏️", command=edit_post).pack(side="left", padx=5)
+        Button(btn, text="Delete 🗑", command=delete_post).pack(side="left", padx=5)
+
+        # ================= COMMENT INPUT =================
+        comment_box = Frame(frame)
+        comment_box.pack(anchor="w", pady=5)
+
+        comment_entry = Entry(comment_box, width=40)
+        comment_entry.pack(side="left", padx=5)
+
+    # ================= CREATE POST =================
     def create_post():
         auth = _auth_tuple()
-        if not auth:
-            messagebox.showwarning("Posts", "Please login first")
-            return
-
         content = new_post_entry.get().strip()
+
+        if not auth:
+            return messagebox.showwarning("Auth", "Login required")
+
         if not content:
-            messagebox.showwarning("Posts", "Post content is empty")
-            return
+            return messagebox.showwarning("Post", "Empty post")
 
-        try:
-            r = requests.post(
-                f"{config.API_BASE_URL}/posts/",
-                json={"content": content},
-                auth=auth,
-            )
-            if r.status_code not in [200, 201]:
-                messagebox.showerror("Posts", r.text)
-                return
+        res = api_post("/posts/", {"content": content}, auth)
 
+        if res and res.status_code in (200, 201):
             new_post_entry.delete(0, "end")
-            load_posts_table()
+            load_posts()
 
-        except Exception as e:
-            messagebox.showerror("Posts", str(e))
+    # ================= SEARCH =================
+    def search_posts():
+        global SEARCH_QUERY, PAGE
+        SEARCH_QUERY = search_entry.get().strip()
+        PAGE = 1
+        load_posts()
 
-    def like_selected_post():
-        auth = _auth_tuple()
-        if not auth:
-            messagebox.showwarning("Posts", "Please login first")
-            return
+    # ================= PAGINATION =================
+    def next_page():
+        global PAGE
+        PAGE += 1
+        load_posts()
 
-        post_id = _get_selected_post_id()
-        if not post_id:
-            messagebox.showwarning("Posts", "Select a post first")
-            return
-
-        try:
-            r = requests.post(
-                f"{config.API_BASE_URL}/posts/{post_id}/likes",
-                auth=auth,
-            )
-            if r.status_code not in [200, 201]:
-                messagebox.showerror("Posts", r.text)
-                return
-
-            load_posts_table()
-
-        except Exception as e:
-            messagebox.showerror("Posts", str(e))
-
-    def add_comment_to_selected_post():
-        auth = _auth_tuple()
-        if not auth:
-            messagebox.showwarning("Posts", "Please login first")
-            return
-
-        post_id = _get_selected_post_id()
-        if not post_id:
-            messagebox.showwarning("Posts", "Select a post first")
-            return
-
-        comment_text = comment_entry.get().strip() or new_post_entry.get().strip()
-        if not comment_text:
-            messagebox.showwarning("Posts", "Comment is empty")
-            return
-
-        try:
-            r = requests.post(
-                f"{config.API_BASE_URL}/comments/posts/{post_id}",
-                json={"content": comment_text},
-                auth=auth,
-            )
-            if r.status_code not in [200, 201]:
-                messagebox.showerror("Posts", r.text)
-                return
-
-            comment_entry.delete(0, "end")
-            load_posts_table()
-
-        except Exception as e:
-            messagebox.showerror("Posts", str(e))
-
-
-    def view_details():
-        post_id = _get_selected_post_id()
-        if not post_id:
-            messagebox.showwarning("Posts", "Select a post first")
-            return
-
-        try:
-            post_res = requests.get(f"{config.API_BASE_URL}/posts/{post_id}")
-            if post_res.status_code != 200:
-                messagebox.showerror("Posts", post_res.text)
-                return
-
-            post = post_res.json()
-
-            win = Toplevel(posts_page)
-            win.title(f"Post Details - {post_id}")
-            win.geometry("550x500")
-
-            Label(win, text="Post Content:", font=("Arial", 10, "bold")).pack(anchor="w")
-
-            content_box = Text(win, height=4, wrap="word")
-            content_box.pack(fill="x", padx=5)
-            content_box.insert("end", post.get("content", ""))
-            content_box.config(state="disabled")
-
-            Label(win, text=f"❤️ Likes: {post.get('likes_count', 0)}").pack(anchor="w", pady=5)
-
-            display_box = Text(win, wrap="word")
-            display_box.pack(fill="both", expand=True, padx=5, pady=5)
-
-            def load_likes():
-                display_box.config(state="normal")
-                display_box.delete("1.0", "end")
-
-                try:
-                    r = requests.get(f"{config.API_BASE_URL}/posts/{post_id}/likes")
-                    if r.status_code == 200:
-                        data = r.json()
-                        print("likes data:" + str(data))
-
-
-                        display_box.insert("end", "❤️ LIKES INFO\n\n")
-                        display_box.insert("end", f"Total Likes: {data.get('likes_count', 0)}\n\n")
-                        display_box.insert("end", str(data.get("likes", [])))
-                    else:
-                        display_box.insert("end", "Failed to load likes")
-
-                except Exception as e:
-                    display_box.insert("end", str(e))
-
-                display_box.config(state="disabled")
-
-            def load_comments():
-                display_box.config(state="normal")
-                display_box.delete("1.0", "end")
-
-                try:
-                    r = requests.get(f"{config.API_BASE_URL}/comments/posts/{post_id}")
-
-                    if r.status_code == 200:
-                        data = r.json()
-
-                        if isinstance(data, list):
-                            comments = data
-                        else:
-                            comments = data.get("comments", [])
-
-                        display_box.insert("end", "💬 COMMENTS INFO\n\n")
-
-                        if not comments:
-                            display_box.insert("end", "No comments yet")
-                        else:
-                            for c in comments:
-                                display_box.insert("end", f"- {c.get('content','')}\n")
-                    else:
-                        display_box.insert("end", "Failed to load comments")
-
-                except Exception as e:
-                    display_box.insert("end", str(e))
-
-                display_box.config(state="disabled")
-
-            btn_frame = Frame(win)
-            btn_frame.pack(pady=5)
-
-            Button(btn_frame, text="Load Likes ❤️", command=load_likes).pack(side="left", padx=10)
-            Button(btn_frame, text="Load Comments 💬", command=load_comments).pack(side="left", padx=10)
-
-        except Exception as e:
-            messagebox.showerror("Posts", str(e))
+    def prev_page():
+        global PAGE
+        if PAGE > 1:
+            PAGE -= 1
+        load_posts()
 
     # ================= UI =================
-    actions = Frame(posts_page)
-    actions.pack(pady=5)
+    top = Frame(posts_page)
+    top.pack(pady=5)
 
-    Button(actions, text="Create Post", command=create_post).pack(side="left", padx=5)
-    Button(actions, text="Like Selected", command=like_selected_post).pack(side="left", padx=5)
-    Button(actions, text="Comment", command=add_comment_to_selected_post).pack(side="left", padx=5)
-    Button(actions, text="Load Posts", command=load_posts_table).pack(side="left", padx=5)
-    Button(actions, text="View Details", command=view_details).pack(side="left", padx=5)
+    Button(top, text="Create Post", command=create_post).pack(side="left")
+    Button(top, text="Reload", command=load_posts).pack(side="left")
 
-    comment_box = Frame(posts_page)
-    comment_box.pack(pady=5)
+    search_frame = Frame(posts_page)
+    search_frame.pack()
 
-    Label(comment_box, text="Comment").pack(side="left", padx=5)
-    comment_entry = Entry(comment_box, width=45)
-    comment_entry.pack(side="left", padx=5)
+    search_entry = Entry(search_frame)
+    search_entry.pack(side="left")
 
-    def handle_events(event, data):
-        if event == "post:new":
-            load_posts_table()
+    Button(search_frame, text="Search", command=search_posts).pack(side="left")
 
+    nav = Frame(posts_page)
+    nav.pack()
+
+    Button(nav, text="Prev", command=prev_page).pack(side="left")
+    Button(nav, text="Next", command=next_page).pack(side="left")
+
+    # INIT LOAD
+    load_posts()
+
+    # ================= SOCKET =================
     def poll_messages():
         try:
-            message = messages.get_nowait()
-        except:
-            posts_page.after(100, poll_messages)
-            return
-
-        try:
-            payload = json.loads(message)
-            handle_events(payload.get("event"), payload.get("data"))
+            msg = messages.get_nowait()
+            data = json.loads(msg)
+            if data.get("event") == "post:new":
+                load_posts()
         except:
             pass
 

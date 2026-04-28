@@ -91,6 +91,24 @@ class Post(Base):
     id = Column(Integer, primary_key=True)
     content = Column(Text, nullable=False)
 
+    image_url = Column(String, nullable=True)
+
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    author = relationship("User", back_populates="posts")
+
+    like_reaction = Column(Integer, default=0)
+    love_reaction = Column(Integer, default=0)
+    haha_reaction = Column(Integer, default=0)
+    wow_reaction = Column(Integer, default=0)
+
+    is_edited = Column(Boolean, default=False)
+    is_deleted = Column(Boolean, default=False)
+    deleted_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+
     likes_count = Column(Integer, default=0)
     comment_count = Column(Integer, default=0)
 
@@ -113,15 +131,29 @@ class Comment(Base):
 
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    parent_id = Column(Integer, ForeignKey("comments.id"), nullable= True)
+
 
     author = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
 
     created_at = Column(DateTime, default=datetime.utcnow)
+    post = relationship("Post")
+    author = relationship("User")
+
 
     likes = relationship(
         "User", secondary=comment_likes, back_populates="likes_comments"
     )
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"))
+    message = Column(String)
+
+    is_read = Column(Boolean, default=datetime.utcnow)
+    
 
 
 class FriendRequest(Base):

@@ -1,6 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+
+import os
+import uuid
+import shutil
+
 
 try:
     from ..db import get_db
@@ -14,6 +19,12 @@ except:
     from auth import read_current_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+AVATAR_DIR = "uploads/avatars"
+COVER_DIR = "uploads/covers"
+
+os.makedirs(AVATAR_DIR, exist_ok=True)
+os.makedirs(COVER_DIR, exist_ok=True)
 
 
 @router.get("/me", response_model=UserGetResponse)
@@ -43,6 +54,103 @@ def get_my_profile(
         "posts": [],
         "comments": [],
     }
+
+
+@router.patch("/me/update", response_model=UserGetResponse)
+def update_my_profile(
+    data: UserUpdate,
+    current_user: User = Depends(read_current_user),
+    db: Session = Depends(get_db),
+):
+
+    user = db.query(User).filter(User.id == current_user.id).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    allowed_fields = {
+        "name",
+        "bio",
+        "phone",
+        "avatar_url",
+        "cover_url",
+        "location",
+        "is_private",
+    }
+
+    for key, value in update_data.items():
+        if key in allowed_fields and value is not None:
+            setattr(user, key, value)
+
+    db.commit()
+    db.refresh(user)
+
+    # 🔥 IMPORTANT FIX: return clean dict (NOT raw SQLAlchemy object)
+    return {
+        "id": user.id,
+        "username": user.username,
+        "name": user.name,
+        "bio": user.bio,
+        "phone": user.phone,
+        "location": user.location,
+        "avatar_url": user.avatar_url,
+        "cover_url": user.cover_url,
+        "friend_count": len(user.friends or []),
+        "posts_count": len(user.posts or []),
+        "comments_count": len(user.comments or []),
+        "followers_count": user.followers_count or 0,
+        "is_private": user.is_private,
+        "joined_date": user.joined_date,
+        "friends": [],
+        "posts": [],
+        "comments": [],
+    }
+
+
+@router.post("/me/cover")
+async def upload_cover(
+    file: UploadFile = File(...),
+    current_user: User = Depends(read_current_user),
+    db: Session = Depends(get_db),
+):
+    ext = file.filename.split(".")[-1]
+    filename = f"{uuid.uuid4()}.{ext}"
+    path = os.path.join(COVER_DIR, filename)
+
+    with open(path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    user = db.query(User).filter(User.id == current_user.id).first()
+    user.cover_url = f"/uploads/covers/{filename}"
+
+    db.commit()
+    db.refresh(user)
+
+    return {"cover_url": user.cover_url}
+
+
+@router.post("/me/cover")
+async def upload_cover(
+    file: UploadFile = File(...),
+    current_user: User = Depends(read_current_user),
+    db: Session = Depends(get_db),
+):
+    ext = file.filename.split(".")[-1]
+    filename = f"{uuid.uuid4()}.{ext}"
+    path = os.path.join(COVER_DIR, filename)
+
+    with open(path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    user = db.query(User).filter(User.id == current_user.id).first()
+    user.cover_url = f"/uploads/covers/{filename}"
+
+    db.commit()
+    db.refresh(user)
+
+    return {"cover_url": user.cover_url}
 
 
 @router.get("/{user_id}", response_model=UserGetResponse)

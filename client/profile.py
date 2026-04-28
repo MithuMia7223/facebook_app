@@ -133,10 +133,6 @@ def build_profile(
             messagebox.showwarning("Profile", "Login first")
             return
 
-        if not user_id:
-            messagebox.showerror("Profile", "User ID missing")
-            return
-
         payload = {
             "name": name_entry.get(),
             "bio": bio_entry.get(),
@@ -146,12 +142,12 @@ def build_profile(
 
         try:
             r = requests.patch(
-                f"{config.API_BASE_URL}/users/{user_id}",
+                f"{config.API_BASE_URL}/users/me/update",
                 json=payload,
                 auth=auth,
             )
 
-            if r.status_code != 200:
+            if r.status_code not in [200, 201, 204]:
                 messagebox.showerror("Profile", r.text)
                 return
 

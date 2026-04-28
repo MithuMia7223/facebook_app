@@ -18,6 +18,7 @@ class UserUpdate(BaseModel):
     cover_url: Optional[str] = None
     location: Optional[str] = None
     is_private: Optional[bool] = None
+    
 
 
 class UserGetResponse(BaseModel):
@@ -57,10 +58,12 @@ class UserOut(BaseModel):
 
 class PostCreate(BaseModel):
     content: str
+    image_url: Optional[str] = None 
 
 
 class PostUpdate(BaseModel):
     content: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class CommentCreate(BaseModel):
@@ -80,6 +83,27 @@ class PostResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class PostOut(BaseModel):
+    id: int
+    content: str
+    image_url : Optional[str]
+
+    likes_count: int
+
+    like_reaction: int
+    love_reaction: int
+    haha_reaction: int
+    wow_reaction: int
+
+    is_edited: bool
+
+
+    created_at: datetime
+    created_at: datetime
+    class Config:
+        from_attributes = True
+        
 
 
 class commentResponse(BaseModel):

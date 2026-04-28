@@ -13,7 +13,11 @@ def _auth_tuple():
 
 
 def _current_user_id(auth):
-    # Use cached user id if available; otherwise fetch once from /users/me.
+    
+    #Use cached user id if available; otherwise fetch once from /users/me.
+
+
+
     user_id = getattr(config, "signed_in_user_id", None)
     if user_id:
         return user_id
@@ -288,4 +292,16 @@ def build_friends(friends_page, friends_table, friend_entry):
     ).pack(side="left", padx=5)
     Button(
         request_actions, text="Reject Request", command=reject_selected_request
-    ).pack(side="left", padx=5)
+    ).pack(side="left", padx=5) 
+
+#Edit Post
+    #Delete Post
+    #Author name
+    #Timestamp
+    #like toggle
+    #like toggle 
+    #Pagination
+    #Search
+    #Better details view
+    #Reactions
+    #Image posts

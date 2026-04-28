@@ -13,7 +13,11 @@ except ImportError:
 router = APIRouter(tags=["Likes"])
 
 # TODO: Create GET /posts/{post_id}/likes for list of users that liked a post
-
+def create_notification(db, user_id: int, message: str):
+    from ..models import Notification
+    notif = Notification(user_id=user_id, message=message)
+    db.add(notif)
+    db.commit()
 
 @router.get("/posts/{post_id}/likes")
 def get_post_likes(
@@ -48,6 +52,13 @@ def like_post(
     if current_user not in post.likes:
         post.likes.append(current_user)
         post.likes_count += 1
+
+        if post.author_id != current_user.id:
+            create_notification(
+                db,
+                post.author_id,
+                f"{current_user.username} liked your post"
+            )
         db.commit()
     return {"message": "Post liked"}
 
@@ -63,8 +74,8 @@ def unlike_post(
         raise HTTPException(status_code=404, detail="Post not found")
     if current_user in post.likes:
         post.likes.remove(current_user)
-        if post.likes_count > 0:
-            post.likes_count -= 1
+        post.likes_count = max(0, post.likes_count - 1)
+
         db.commit()
     return {"message": "Post unliked"}
 
@@ -96,7 +107,7 @@ def unlike_comment(
         raise HTTPException(status_code=404, detail="Comment not found")
     if current_user in comment.likes:
         comment.likes.remove(current_user)
-        if comment.likes_count > 0:
-            comment.likes_count -= 1
+        comment.likes_count = max(0, comment.likes_count - 1)
+        
         db.commit()
     return {"message": "Comment unliked"}
