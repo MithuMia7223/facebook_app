@@ -1,7 +1,9 @@
-from tkinter import Button, Entry, Label, messagebox, Frame, filedialog
+from tkinter import *
+from tkinter import messagebox, filedialog
 from PIL import Image, ImageTk
 import requests
 import config
+from io import BytesIO
 
 
 def _auth_tuple():
@@ -45,7 +47,6 @@ def build_profile(
     stats_label = Label(profile_page, text="")
     stats_label.pack(pady=10)
 
-    
     def load_profile():
         auth = _auth_tuple()
         if not auth:
@@ -62,16 +63,16 @@ def build_profile(
             data = r.json()
             config.signed_in_user_id = data.get("id")
 
+            # ---------------- TEXT ----------------
             profile_text.delete("1.0", "end")
             profile_text.insert(
                 "end",
                 f"ID: {data.get('id')}\n"
                 f"Username: {data.get('username')}\n"
                 f"Name: {data.get('name')}\n"
-                f"Bio: {data.get('bio')}\n"
+                f"Bio: {data.get('bio')}\n",
             )
 
-            # fill fields
             name_entry.delete(0, "end")
             name_entry.insert(0, data.get("name", ""))
 
@@ -84,51 +85,67 @@ def build_profile(
             phone_entry.delete(0, "end")
             phone_entry.insert(0, data.get("phone", ""))
 
-            # stats
             stats_label.config(
                 text=f"Posts: {data.get('post_count', 0)} | "
-                     f"Comments: {data.get('comment_count', 0)} | "
-                     f"Friends: {len(data.get('friends', []))}"
+                f"Comments: {data.get('comment_count', 0)} | "
+                f"Friends: {len(data.get('friends', []))}"
             )
 
-            
-            avatar_url = data.get("avatar_url")
-            if avatar_url:
-                try:
-                    img_data = requests.get(config.API_BASE_URL + avatar_url, stream=True).raw
-                    img = Image.open(img_data).resize((100, 100))
-                    img = ImageTk.PhotoImage(img)
+            # ================= COVER =================
+            cover_url = data.get("cover_url")
 
-                    avatar_label.config(image=img, text="")
-                    avatar_label.image = img
-                except:
-                    avatar_label.config(text="Image Error")
-            else:
-                avatar_label.config(text="No Avatar")
-
-            
-            cover_url = data.get("cover_photo")
             if cover_url:
                 try:
-                    img_data = requests.get(config.API_BASE_URL + cover_url, stream=True).raw
-                    img = Image.open(img_data).resize((400, 120))
-                    img = ImageTk.PhotoImage(img)
+                    full_url = config.API_BASE_URL.rstrip("/") + cover_url
+                    res = requests.get(full_url, timeout=10)
 
-                    cover_label.config(image=img, text="")
-                    cover_label.image = img
-                except:
-                    cover_label.config(text="Cover Error")
-            else:
-                cover_label.config(text="No Cover Photo")
+                    if res.status_code == 200 and "image" in res.headers.get(
+                        "Content-Type", ""
+                    ):
+                        img = Image.open(BytesIO(res.content))
+                        img = img.resize((400, 120))
+
+                        img = ImageTk.PhotoImage(img)
+
+                        cover_label.config(image=img, text="")
+                        cover_label.image = img
+                    else:
+                        cover_label.config(text="No Cover Photo")
+
+                except Exception as e:
+                    print("[ERROR] Cover:", e)
+                    cover_label.config(text="No Cover Photo")
+
+            # ================= AVATAR =================
+            avatar_url = data.get("avatar_url")
+
+            if avatar_url:
+                try:
+                    full_url = config.API_BASE_URL.rstrip("/") + avatar_url
+                    res = requests.get(full_url, timeout=10)
+
+                    if res.status_code == 200 and "image" in res.headers.get(
+                        "Content-Type", ""
+                    ):
+                        img = Image.open(BytesIO(res.content))
+                        img = img.resize((150, 150))
+
+                        img = ImageTk.PhotoImage(img)
+
+                        avatar_label.config(image=img, text="")
+                        avatar_label.image = img
+                    else:
+                        avatar_label.config(text="No Avatar")
+
+                except Exception as e:
+                    print("[ERROR] Avatar:", e)
+                    avatar_label.config(text="No Avatar")
 
         except Exception as e:
             messagebox.showerror("Profile", str(e))
 
-    
     def update_profile():
         auth = _auth_tuple()
-        user_id = getattr(config, "signed_in_user_id", None)
-
         if not auth:
             messagebox.showwarning("Profile", "Login first")
             return
@@ -147,75 +164,69 @@ def build_profile(
                 auth=auth,
             )
 
-            if r.status_code not in [200, 201, 204]:
+            if r.status_code in [200, 201, 204]:
+                messagebox.showinfo("Profile", "Updated successfully")
+                load_profile()
+            else:
                 messagebox.showerror("Profile", r.text)
-                return
-
-            messagebox.showinfo("Profile", "Updated successfully")
-            load_profile()
 
         except Exception as e:
             messagebox.showerror("Profile", str(e))
 
-    
     def upload_avatar():
         auth = _auth_tuple()
         if not auth:
             return
 
-        file_path = filedialog.askopenfilename(
-            filetypes=[("Images", "*.png *.jpg *.jpeg")]
+        path = filedialog.askopenfilename(
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.webp")]
         )
-        if not file_path:
+        if not path:
             return
 
         try:
-            with open(file_path, "rb") as f:
+            with open(path, "rb") as f:
+                files = {"file": ("avatar.jpg", f, "image/jpeg")}
                 r = requests.post(
                     f"{config.API_BASE_URL}/users/me/avatar",
-                    files={"file": f},
+                    files=files,
                     auth=auth,
                 )
 
             if r.status_code in [200, 201]:
                 messagebox.showinfo("Profile", "Avatar uploaded")
                 load_profile()
-            else:
-                messagebox.showerror("Profile", r.text)
 
         except Exception as e:
             messagebox.showerror("Profile", str(e))
 
-    
     def upload_cover():
         auth = _auth_tuple()
         if not auth:
             return
 
-        file_path = filedialog.askopenfilename(
-            filetypes=[("Images", "*.png *.jpg *.jpeg")]
+        path = filedialog.askopenfilename(
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.webp")]
         )
-        if not file_path:
+        if not path:
             return
 
         try:
-            with open(file_path, "rb") as f:
+            with open(path, "rb") as f:
+                files = {"file": ("cover.jpg", f, "image/jpeg")}
                 r = requests.post(
                     f"{config.API_BASE_URL}/users/me/cover",
-                    files={"file": f},
+                    files=files,
                     auth=auth,
                 )
 
-            if r.status_code == 200:
-                messagebox.showinfo("Profile", "Cover updated")
+            if r.status_code in [200, 201]:
+                messagebox.showinfo("Profile", "Cover uploaded")
                 load_profile()
-            else:
-                messagebox.showerror("Profile", r.text)
 
         except Exception as e:
             messagebox.showerror("Profile", str(e))
 
-    
     def logout():
         config.signed_in_username = None
         config.signed_in_password = None
@@ -227,15 +238,13 @@ def build_profile(
 
         fb.add(login_page, text="Login")
         fb.add(signup_page, text="Signup")
-        fb.select(login_page)
 
         messagebox.showinfo("Logout", "Logged out")
 
-    
-    Button(profile_page, text="Upload Avatar", command=upload_avatar).pack(pady=4)
-    Button(profile_page, text="Upload Cover", command=upload_cover).pack(pady=4)
-    Button(profile_page, text="Load Profile", command=load_profile).pack(pady=4)
-    Button(profile_page, text="Update Profile", command=update_profile).pack(pady=4)
+    Button(profile_page, text="Upload Avatar", command=upload_avatar).pack(pady=3)
+    Button(profile_page, text="Upload Cover", command=upload_cover).pack(pady=3)
+    Button(profile_page, text="Load Profile", command=load_profile).pack(pady=3)
+    Button(profile_page, text="Update Profile", command=update_profile).pack(pady=3)
     Button(profile_page, text="Logout", command=logout).pack(pady=10)
 
     return load_profile

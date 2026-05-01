@@ -2,6 +2,7 @@ from tkinter import *
 from tkinter import ttk, messagebox
 import requests
 import config
+from PIL import Image
 
 
 def build_auth(
@@ -60,16 +61,27 @@ def build_auth(
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    def load_image(url, filename):
+        try:
+            res = requests.get(url)
+            if "image" in res.headers.get("Content-Type", ""):
+                with open(filename, "wb") as f:
+                    f.write(res.content)
+                return Image.open(filename)
+            else:
+                print("Not a valid image:", url)
+        except Exception as e:
+            print("Image error:", e)
+        return None
+
     def login():
         user = username_entry.get()
         pwd = password_entry.get()
 
-
         if not user or not pwd:
             messagebox.showwarning("Input Error", "Enter username & password")
             return
-        
-        
+
         print("Trying to login", user, pwd)
 
         try:
@@ -77,18 +89,16 @@ def build_auth(
             print("Status:", r.status_code)
             print("Response:", r.text)
 
-
             if r.status_code != 200:
                 messagebox.showerror("Login", "Failed")
                 return
+
             data = r.json()
             print("User data:", data)
-
 
             config.signed_in_username = user
             config.signed_in_password = pwd
             config.signed_in_user_id = data.get("id")
-
 
             fb.forget(login_page)
             fb.forget(signup_page)
@@ -97,11 +107,25 @@ def build_auth(
             fb.add(posts_page, text="Posts")
             fb.add(friends_page, text="Friends")
 
-        
-
-            #profile_text.pack(pady=10)
-
             fb.select(profile_page)
+
+            BASE_URL = config.API_BASE_URL
+
+            if data.get("avatar_url"):
+                avatar_url = BASE_URL + data["avatar_url"]
+                print("Avatar:", avatar_url)
+
+                avatar_img = load_image(avatar_url, "avatar.jpg")
+                if avatar_img:
+                    avatar_img.show()
+
+            if data.get("cover_url"):
+                cover_url = BASE_URL + data["cover_url"]
+                print("Cover:", cover_url)
+
+                cover_img = load_image(cover_url, "cover.jpg")
+                if cover_img:
+                    cover_img.show()
 
         except Exception as e:
             print("ERROR:", e)

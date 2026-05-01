@@ -1,5 +1,6 @@
 import asyncio
 from websockets.asyncio.client import connect
+from websockets import exceptions
 import queue
 
 messages = queue.Queue()
@@ -10,10 +11,22 @@ async def listen():
         print("WebSocket connection established.")
 
         while True:
-            message = await websocket.recv()
-            print("Received message: " + message)
-            messages.put(message)
+            try:
+                message = await websocket.recv()
+                print("Received message: " + message)
+                messages.put(message)
+
+            except exceptions.ConnectionClosedError:
+
+                break
+
+            except Exception as e:
+                print(f"[ERROR] WebSocket error: {e}")
+                break
 
 
 def start_listening():
-    asyncio.run(listen()) 
+    try:
+        asyncio.run(listen())
+    except KeyboardInterrupt:
+        pass

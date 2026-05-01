@@ -18,7 +18,6 @@ class UserUpdate(BaseModel):
     cover_url: Optional[str] = None
     location: Optional[str] = None
     is_private: Optional[bool] = None
-    
 
 
 class UserGetResponse(BaseModel):
@@ -31,7 +30,7 @@ class UserGetResponse(BaseModel):
     location: Optional[str] = None
 
     friend_count: int
-    posts_count: int 
+    posts_count: int
     comments_count: int
     followers_count: int
 
@@ -44,6 +43,7 @@ class UserGetResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class UserOut(BaseModel):
     id: int
@@ -58,7 +58,7 @@ class UserOut(BaseModel):
 
 class PostCreate(BaseModel):
     content: str
-    image_url: Optional[str] = None 
+    image_url: Optional[str] = None
 
 
 class PostUpdate(BaseModel):
@@ -84,10 +84,11 @@ class PostResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class PostOut(BaseModel):
     id: int
     content: str
-    image_url : Optional[str]
+    image_url: Optional[str]
 
     likes_count: int
 
@@ -98,12 +99,11 @@ class PostOut(BaseModel):
 
     is_edited: bool
 
+    created_at: datetime
+    created_at: datetime
 
-    created_at: datetime
-    created_at: datetime
     class Config:
         from_attributes = True
-        
 
 
 class commentResponse(BaseModel):

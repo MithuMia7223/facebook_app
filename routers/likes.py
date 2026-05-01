@@ -12,12 +12,15 @@ except ImportError:
 
 router = APIRouter(tags=["Likes"])
 
+
 # TODO: Create GET /posts/{post_id}/likes for list of users that liked a post
 def create_notification(db, user_id: int, message: str):
     from ..models import Notification
+
     notif = Notification(user_id=user_id, message=message)
     db.add(notif)
     db.commit()
+
 
 @router.get("/posts/{post_id}/likes")
 def get_post_likes(
@@ -49,18 +52,14 @@ def like_post(
     post = db.query(Post).filter(Post.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    if current_user not in post.likes:
-        post.likes.append(current_user)
-        post.likes_count += 1
+    if current_user in post.likes:
+        return {"message": "Already liked"}
+    post.likes.append(current_user)
+    post.likes_count += 1
+    
+    db.commit()
+    return{"message": "Liked"}
 
-        if post.author_id != current_user.id:
-            create_notification(
-                db,
-                post.author_id,
-                f"{current_user.username} liked your post"
-            )
-        db.commit()
-    return {"message": "Post liked"}
 
 
 @router.delete("/posts/{post_id}/likes")
@@ -77,7 +76,33 @@ def unlike_post(
         post.likes_count = max(0, post.likes_count - 1)
 
         db.commit()
-    return {"message": "Post unliked"}
+    return {"message": "unliked"}
+
+@router.post("posts/{post_id}/reaction")
+def react_post(
+    post_id: int,
+    data: dict,
+    current_user: User=Depends(read_current_user),
+    db: Session = Depends(get_db),
+):
+    post = db.query(Post).filter(Post.id == post_id).first()
+
+    if not post:
+        raise HTTPException (status_code=404, detail="Post not found")
+    reaction_type = data.get("type")
+
+    if reaction_type =="love":
+        post.love_reaction += 1
+    elif reaction_type =="haha":
+        post.haha_reaction += 1
+    elif reaction_type =="wow":
+        post.wow_reaction +1
+    else:
+        raise HTTPException(400, "Invalid reaction type")
+    
+    db.commit()
+
+    return {"message": f"{reaction_type}added"}
 
 
 @router.post("/comments/{comment_id}/likes")

@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 import os
 import uuid
 import shutil
-
 
 try:
     from ..db import get_db
@@ -87,7 +87,6 @@ def update_my_profile(
     db.commit()
     db.refresh(user)
 
-    # 🔥 IMPORTANT FIX: return clean dict (NOT raw SQLAlchemy object)
     return {
         "id": user.id,
         "username": user.username,
@@ -109,26 +108,25 @@ def update_my_profile(
     }
 
 
-@router.post("/me/cover")
-async def upload_cover(
+@router.post("/me/avatar")
+async def upload_avatar(
     file: UploadFile = File(...),
     current_user: User = Depends(read_current_user),
     db: Session = Depends(get_db),
 ):
     ext = file.filename.split(".")[-1]
     filename = f"{uuid.uuid4()}.{ext}"
-    path = os.path.join(COVER_DIR, filename)
+    path = os.path.join(AVATAR_DIR, filename)
 
     with open(path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     user = db.query(User).filter(User.id == current_user.id).first()
-    user.cover_url = f"/uploads/covers/{filename}"
+    user.avatar_url = f"/uploads/avatars/{filename}"
 
     db.commit()
     db.refresh(user)
-
-    return {"cover_url": user.cover_url}
+    return {"avatar_url": user.avatar_url}
 
 
 @router.post("/me/cover")
@@ -157,7 +155,7 @@ async def upload_cover(
 def get_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id, User.is_deleted == False).first()
     if not user:
-        raise HTTPException(Status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="User not found")
 
     return user
 
@@ -405,3 +403,6 @@ def remove_friend(
         db.commit()
 
     return {"message": "Friend removed"}
+
+
+router.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")

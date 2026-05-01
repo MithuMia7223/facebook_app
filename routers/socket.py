@@ -1,7 +1,6 @@
 from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
-
 router = APIRouter(prefix="/ws", tags=["WS"])
 
 
@@ -48,4 +47,3 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         await manager.broadcast("A client left the chat")
-        

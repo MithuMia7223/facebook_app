@@ -90,7 +90,6 @@ class Post(Base):
 
     id = Column(Integer, primary_key=True)
     content = Column(Text, nullable=False)
-
     image_url = Column(String, nullable=True)
 
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -107,15 +106,9 @@ class Post(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
 
     likes_count = Column(Integer, default=0)
     comment_count = Column(Integer, default=0)
-
-    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    author = relationship("User", back_populates="posts")
-
-    created_at = Column(DateTime, default=datetime.utcnow)
 
     comments = relationship("Comment", back_populates="post")
     likes = relationship("User", secondary=post_likes, back_populates="likes_posts")
@@ -126,25 +119,22 @@ class Comment(Base):
 
     id = Column(Integer, primary_key=True)
     content = Column(Text, nullable=False)
-
     likes_count = Column(Integer, default=0)
 
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
-    parent_id = Column(Integer, ForeignKey("comments.id"), nullable= True)
-
+    parent_id = Column(Integer, ForeignKey("comments.id"), nullable=True)
 
     author = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
 
     created_at = Column(DateTime, default=datetime.utcnow)
-    post = relationship("Post")
-    author = relationship("User")
-
 
     likes = relationship(
         "User", secondary=comment_likes, back_populates="likes_comments"
     )
+
+
 class Notification(Base):
     __tablename__ = "notifications"
     id = Column(Integer, primary_key=True)
@@ -152,8 +142,7 @@ class Notification(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     message = Column(String)
 
-    is_read = Column(Boolean, default=datetime.utcnow)
-    
+    is_read = Column(Boolean, default=True)
 
 
 class FriendRequest(Base):

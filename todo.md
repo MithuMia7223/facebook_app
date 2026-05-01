@@ -1,0 +1,3 @@
+- [ ] add profile image
+- [ ] beautify all pages (tkbootstrap)
+- [ ] fix comment likes and replies

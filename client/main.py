@@ -12,7 +12,6 @@ import json
 import threading
 import setting
 
-
 main = Tk()
 main.title("Social App")
 main.geometry("900x650")

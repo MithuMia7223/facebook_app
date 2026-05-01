@@ -14,16 +14,16 @@ except ImportError:
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
+
 def Create_notification(db, user_id: int, message: str):
     try:
         from ..models import Notification
-        notif =Notification(user_id=user_id, message=message)
+
+        notif = Notification(user_id=user_id, message=message)
         db.add(notif)
         db.commit()
     except:
         pass
-
-
 
 
 @router.post("/posts/{post_id}")
@@ -39,7 +39,10 @@ def create_comment(
         raise HTTPException(status_code=404, detail="Post not found")
 
     new_comment = Comment(
-        content=comment.content, author_id=current_user.id, post_id=post_id, parent_id=parent_id
+        content=comment.content,
+        author_id=current_user.id,
+        post_id=post_id,
+        parent_id=parent_id,
     )
     post.comment_count += 1
 
@@ -48,11 +51,7 @@ def create_comment(
     db.refresh(new_comment)
 
     if post.author_id != current_user.id:
-        Create_notification(
-            db,
-            post.author_id,
-            "Someone commented on your post"
-        )
+        Create_notification(db, post.author_id, "Someone commented on your post")
 
     return new_comment
 
@@ -68,45 +67,40 @@ def get_post_comments(
 
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    
+
     comments = (
         db.query(Comment)
-        .filter(Comment.post_id == post_id, Comment.parent_id == None )
+        .filter(Comment.post_id == post_id, Comment.parent_id == None)
         .offset(offset)
         .limit(limit)
         .all()
     )
-    
-    return {
-        "total": len(comments),
-        "data": comments
-    }
+
+    return {"total": len(comments), "data": comments}
+
+
 def get_replies(comment_id: int, db):
     return db.query(Comment).filter(Comment.parent_id == comment_id).all()
+
 
 @router.get("/tree/{post_id}")
 def comment_tree(post_id: int, db: Session = Depends(get_db)):
 
-    comments = db.query(Comment).filter(
-        Comment.post_id == post_id,
-        Comment.parent_id == None
-
-    ).all()
+    comments = (
+        db.query(Comment)
+        .filter(Comment.post_id == post_id, Comment.parent_id == None)
+        .all()
+    )
 
     def build(comment):
-        return{
+        return {
             "id": comment.id,
             "content": comment.content,
             "author_id": comment.author_id,
-            "replies": [
-                build(reply) for reply in get_replies(comment.id, db)
-
-            ]
+            "replies": [build(reply) for reply in get_replies(comment.id, db)],
         }
-    
+
     return [build(c) for c in comments]
-
-
 
 
 @router.patch("/{comment_id}")
@@ -143,8 +137,7 @@ def delete_comment(
     post = db.query(Post).filter(Post.id == comment.post_id).first()
     if post and post.comment_count > 0:
         post.comment_count -= 1
-        
+
     db.delete(comment)
     db.commit()
     return {"message": "Comment deleted"}
-
