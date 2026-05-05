@@ -83,6 +83,148 @@ def get_replies(comment_id: int, db):
     return db.query(Comment).filter(Comment.parent_id == comment_id).all()
 
 
+@router.post("/{comment_id}/likes")
+def like_comment(
+    comment_id: int,
+    current_user: User = Depends(read_current_user),
+    db: Session = Depends(get_db),
+):
+    comment = db.query(Comment).filter(Comment.id == comment_id).first()
+
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    # Check if already liked
+    from ..models import comment_likes
+
+    existing_like = (
+        db.query(comment_likes)
+        .filter(
+            comment_likes.c.user_id == current_user.id,
+            comment_likes.c.comment_id == comment_id,
+        )
+        .first()
+    )
+
+    if existing_like:
+        return {"message": "Already liked"}
+
+    # Add like
+    comment.likes.append(current_user)
+    comment.likes_count += 1
+
+    db.commit()
+    return {"message": "Liked", "likes_count": comment.likes_count}
+
+
+@router.delete("/{comment_id}/likes")
+def unlike_comment(
+    comment_id: int,
+    current_user: User = Depends(read_current_user),
+    db: Session = Depends(get_db),
+):
+    comment = db.query(Comment).filter(Comment.id == comment_id).first()
+
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    # Check if liked
+    from ..models import comment_likes
+
+    existing_like = (
+        db.query(comment_likes)
+        .filter(
+            comment_likes.c.user_id == current_user.id,
+            comment_likes.c.comment_id == comment_id,
+        )
+        .first()
+    )
+
+    if not existing_like:
+        return {"message": "Not liked"}
+
+    # Remove like
+    comment.likes.remove(current_user)
+    comment.likes_count = max(0, comment.likes_count - 1)
+
+    db.commit()
+    return {"message": "Unliked", "likes_count": comment.likes_count}
+
+
+@router.post("/{comment_id}/replies")
+def reply_comment(
+    comment_id: int,
+    data: CommentCreate,
+    current_user: User = Depends(read_current_user),
+    db: Session = Depends(get_db),
+):
+    parent = db.query(Comment).filter(Comment.id == comment_id).first()
+
+    if not parent:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    reply = Comment(
+        content=data.content,
+        author_id=current_user.id,
+        post_id=parent.post_id,
+        parent_id=comment_id,
+        likes_count=0,
+    )
+
+    db.add(reply)
+    db.commit()
+    db.refresh(reply)
+
+    return reply
+
+
+@router.patch("/{comment_id}")
+def update_comment(
+    comment_id: int,
+    data: CommentUpdate,
+    current_user: User = Depends(read_current_user),
+    db: Session = Depends(get_db),
+):
+    comment = db.query(Comment).filter(Comment.id == comment_id).first()
+
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    if comment.author_id != current_user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if data.content is not None:
+        comment.content = data.content
+
+    db.commit()
+    db.refresh(comment)
+    return comment
+
+
+@router.delete("/{comment_id}")
+def delete_comment(
+    comment_id: int,
+    current_user: User = Depends(read_current_user),
+    db: Session = Depends(get_db),
+):
+    comment = db.query(Comment).filter(Comment.id == comment_id).first()
+
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    if comment.author_id != current_user.id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    post = db.query(Post).filter(Post.id == comment.post_id).first()
+    if post and post.comment_count > 0:
+        post.comment_count -= 1
+
+    db.delete(comment)
+    db.commit()
+
+    return {"message": "deleted"}
+
+
 @router.get("/tree/{post_id}")
 def comment_tree(post_id: int, db: Session = Depends(get_db)):
 

@@ -115,18 +115,39 @@ def build_posts(posts_page, posts_container, new_post_entry):
             like_label = Label(comment_frame, text=f"👍 {c.get('likes_count',0)}")
             like_label.pack(anchor="w")
 
-            def like_comment(comment_id=cid, label=like_label):
+            def like_comment(comment_id=cid, label=like_label, data=c):
                 auth = _auth_tuple()
                 if not auth:
-                    return
+                    return messagebox.showwarning("Auth", "Login required")
 
-                res = api_post(f"/comments/{comment_id}/like", {}, auth)
+                res = api_post(f"/comments/{comment_id}/likes", {}, auth=auth)
 
                 if res and res.status_code in (200, 201):
-                    current = c.get("likes_count", 0)
-                    c["likes_count"] = current + 1
-                    label.config(text=f"👍 {current + 1}")
+                    response_data = res.json()
+                    if response_data.get("message") == "Already liked":
+                        # Already liked, so unlike
+                        res_unlike = api_delete(
+                            f"/comments/{comment_id}/likes", auth=auth
+                        )
+                        if res_unlike and res_unlike.status_code == 200:
+                            data["likes_count"] = max(0, data.get("likes_count", 0) - 1)
+                            label.config(text=f"👍 {data['likes_count']}")
+                    else:
+                        # Liked successfully
+                        data["likes_count"] = data.get("likes_count", 0) + 1
+                        label.config(text=f"👍 {data['likes_count']}")
+                elif (
+                    res
+                    and res.status_code == 200
+                    and res.json().get("message") == "Already liked"
+                ):
+                    # If somehow 200 but already liked, unlike
+                    res_unlike = api_delete(f"/comments/{comment_id}/likes", auth=auth)
+                    if res_unlike and res_unlike.status_code == 200:
+                        data["likes_count"] = max(0, data.get("likes_count", 0) - 1)
+                        label.config(text=f"👍 {data['likes_count']}")
 
+            # reply input
             reply_box = Frame(comment_frame)
             reply_box.pack(anchor="w", pady=3)
 
@@ -136,25 +157,35 @@ def build_posts(posts_page, posts_container, new_post_entry):
             def reply_comment(comment_id=cid, entry=reply_entry):
                 auth = _auth_tuple()
                 if not auth:
-                    return
+                    return messagebox.showwarning("Auth", "Login required")
 
                 text = entry.get().strip()
                 if not text:
                     return
 
-                res = api_post(f"/comments/{comment_id}/reply", {"content": text}, auth)
+                res = api_post(
+                    f"/comments/{comment_id}/replies", {"content": text}, auth=auth
+                )
 
                 if res and res.status_code in (200, 201):
                     entry.delete(0, "end")
                     messagebox.showinfo("Reply", "Reply added")
+                    win.destroy()
+                    open_comments(post_id)
 
             btns = Frame(comment_frame)
             btns.pack(anchor="w")
 
-            Button(btns, text="Like 👍", command=like_comment).pack(side="left", padx=5)
-            Button(btns, text="Reply 💬", command=reply_comment).pack(
-                side="left", padx=5
-            )
+            Button(
+                btns,
+                text="Like 👍",
+                command=lambda cid=cid, l=like_label, d=c: like_comment(cid, l, d),
+            ).pack(side="left", padx=5)
+            Button(
+                btns,
+                text="Reply 💬",
+                command=lambda cid=cid, e=reply_entry: reply_comment(cid, e),
+            ).pack(side="left", padx=5)
 
     def create_post_card(p):
         post_id = p.get("id")
@@ -184,15 +215,29 @@ def build_posts(posts_page, posts_container, new_post_entry):
             if not auth:
                 return messagebox.showwarning("Auth", "Login required")
 
-            if not liked:
-                res = api_post(f"/posts/{post_id}/likes", {}, auth)
-                if res and res.status_code in (200, 201):
+            res = api_post(f"/posts/{post_id}/likes", {}, auth)
+            if res and res.status_code in (200, 201):
+                response_data = res.json()
+                if response_data.get("message") == "Already liked":
+                    # Already liked, so unlike
+                    res_unlike = api_delete(f"/posts/{post_id}/likes", auth)
+                    if res_unlike and res_unlike.status_code == 200:
+                        liked = False
+                        p["likes_count"] = max(0, p.get("likes_count", 0) - 1)
+                        like_label.config(text=f"👍 {p['likes_count']}")
+                else:
+                    # Liked successfully
                     liked = True
                     p["likes_count"] = p.get("likes_count", 0) + 1
                     like_label.config(text=f"👍 {p['likes_count']}")
-            else:
-                res = api_delete(f"/posts/{post_id}/likes", auth)
-                if res and res.status_code == 200:
+            elif (
+                res
+                and res.status_code == 200
+                and res.json().get("message") == "Already liked"
+            ):
+                # If somehow 200 but already liked, unlike
+                res_unlike = api_delete(f"/posts/{post_id}/likes", auth)
+                if res_unlike and res_unlike.status_code == 200:
                     liked = False
                     p["likes_count"] = max(0, p.get("likes_count", 0) - 1)
                     like_label.config(text=f"👍 {p['likes_count']}")
